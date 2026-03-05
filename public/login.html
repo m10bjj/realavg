@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>로그인 — 국토부 실거래가</title>
+  <link rel="stylesheet" href="login.css" />
+</head>
+<body>
+
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </div>
+      <h1 class="login-title">국토부 실거래가 조회</h1>
+      <p class="login-sub">계속하려면 로그인하세요</p>
+
+      <form id="login-form" onsubmit="handleLogin(event)">
+        <div class="field-group">
+          <label for="login-id">아이디</label>
+          <input type="text" id="login-id" placeholder="아이디 입력" autocomplete="username" required />
+        </div>
+        <div class="field-group">
+          <label for="login-pw">비밀번호</label>
+          <input type="password" id="login-pw" placeholder="비밀번호 입력" autocomplete="current-password" required />
+        </div>
+        <div id="login-error" class="login-error" style="display:none"></div>
+        <button type="submit" class="btn-login" id="login-btn">로그인</button>
+      </form>
+
+      <button class="btn-recover-link" onclick="openRecover()">비밀번호를 잊으셨나요?</button>
+    </div>
+  </div>
+
+  <!-- 비밀번호 찾기 모달 -->
+  <div id="recover-modal" class="recover-backdrop" style="display:none" onclick="closeRecoverOutside(event)">
+    <div class="recover-card">
+      <div class="recover-header">
+        <h3>비밀번호 찾기</h3>
+        <button class="btn-recover-close" onclick="closeRecover()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <p class="recover-desc">등록된 정보를 입력하면 비밀번호를 확인할 수 있습니다.</p>
+
+      <div id="recover-form-wrap">
+        <div class="field-group">
+          <label>이름 <span class="hint">(2자)</span></label>
+          <input type="text" id="rec-name" placeholder="이름 입력" maxlength="10" />
+        </div>
+        <div class="field-group">
+          <label>전화번호 끝 4자리</label>
+          <input type="text" id="rec-phone" placeholder="예: 1234" maxlength="4" inputmode="numeric" />
+        </div>
+        <div class="field-group">
+          <label>생년월일 <span class="hint">(6자리)</span></label>
+          <input type="text" id="rec-birth" placeholder="생년월일 6자리" maxlength="6" inputmode="numeric" />
+        </div>
+        <div class="field-group">
+          <label>PIN번호 <span class="hint">(6자리)</span></label>
+          <input type="password" id="rec-pin" placeholder="PIN 6자리" maxlength="6" inputmode="numeric" />
+        </div>
+        <div id="recover-error" class="login-error" style="display:none"></div>
+        <button class="btn-login" onclick="handleRecover()">확인</button>
+      </div>
+
+      <div id="recover-result" class="recover-result" style="display:none">
+        <p class="recover-result-label">내 비밀번호</p>
+        <div class="recover-pw-box" id="recover-pw-display"></div>
+        <button class="btn-login" style="margin-top:16px" onclick="closeRecover()">로그인 화면으로</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function handleLogin(e) {
+      e.preventDefault();
+      const id  = document.getElementById('login-id').value.trim();
+      const pw  = document.getElementById('login-pw').value;
+      const err = document.getElementById('login-error');
+      const btn = document.getElementById('login-btn');
+
+      btn.disabled = true;
+      btn.textContent = '로그인 중…';
+      err.style.display = 'none';
+
+      try {
+        const res  = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, password: pw }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          window.location.href = '/';
+        } else {
+          err.textContent    = data.error || '아이디 또는 비밀번호가 올바르지 않습니다.';
+          err.style.display  = 'block';
+          document.getElementById('login-pw').value = '';
+        }
+      } catch (_) {
+        err.textContent   = '서버 연결 오류가 발생했습니다.';
+        err.style.display = 'block';
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = '로그인';
+      }
+    }
+
+    function openRecover() {
+      document.getElementById('recover-modal').style.display = 'flex';
+      document.getElementById('recover-form-wrap').style.display = '';
+      document.getElementById('recover-result').style.display = 'none';
+      document.getElementById('recover-error').style.display = 'none';
+      ['rec-name','rec-phone','rec-birth','rec-pin'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+    }
+    function closeRecover() {
+      document.getElementById('recover-modal').style.display = 'none';
+    }
+    function closeRecoverOutside(e) {
+      if (e.target.id === 'recover-modal') closeRecover();
+    }
+
+    async function handleRecover() {
+      const name  = document.getElementById('rec-name').value.trim();
+      const phone = document.getElementById('rec-phone').value.trim();
+      const birth = document.getElementById('rec-birth').value.trim();
+      const pin   = document.getElementById('rec-pin').value.trim();
+      const err   = document.getElementById('recover-error');
+      err.style.display = 'none';
+
+      if (!name || !phone || !birth || !pin) {
+        err.textContent = '모든 항목을 입력해주세요.';
+        err.style.display = 'block';
+        return;
+      }
+
+      try {
+        const res  = await fetch('/auth/recover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone_last4: phone, birthdate: birth, pin }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('recover-form-wrap').style.display = 'none';
+          document.getElementById('recover-pw-display').textContent = data.password;
+          document.getElementById('recover-result').style.display = '';
+        } else {
+          err.textContent   = data.error || '입력 정보가 일치하지 않습니다.';
+          err.style.display = 'block';
+        }
+      } catch (_) {
+        err.textContent   = '서버 오류가 발생했습니다.';
+        err.style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>

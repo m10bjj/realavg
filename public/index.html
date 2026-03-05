@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>국토부 실거래가 조회</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── 헤더 ── -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span>국토부 실거래가 조회</span>
+      </div>
+      <span id="header-user" class="header-user"></span>
+      <button class="btn-icon-only" id="settings-btn" title="API 키 설정" onclick="openSettings()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── 앱 레이아웃 ── -->
+  <div class="app-layout">
+
+    <!-- 왼쪽 사이드바 -->
+    <aside class="sidebar">
+      <div class="sidebar-body">
+        <div class="sidebar-title">
+          <span class="sidebar-title-label">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            거래 조회
+          </span>
+          <button class="btn-sidebar-toggle" id="sidebar-toggle-btn" onclick="toggleSidebar()">
+            <svg id="sidebar-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="18 15 12 9 6 15"/>
+            </svg>
+          </button>
+        </div>
+        <div class="form-sections">
+
+        <!-- ① 지역 -->
+        <div class="form-section form-section--region">
+          <div class="form-section-header">지역</div>
+          <div class="section-grid">
+            <div class="form-group">
+              <label for="city-select">시 / 도</label>
+              <select id="city-select" onchange="onCityChange()">
+                <option value="">-- 시/도 선택 --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="district-select">구 / 군 / 시</label>
+              <select id="district-select" disabled onchange="onDistrictChange()">
+                <option value="">-- 구/군/시 선택 --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="filter-dong">읍면동</label>
+              <select id="filter-dong" onchange="applyFilters()" disabled>
+                <option value="">-- 구/군/시 선택 --</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ② 거래 유형 · 기간 -->
+        <div class="form-section form-section--trade">
+          <div class="form-section-header">거래 유형 · 기간</div>
+          <div class="section-grid">
+            <div class="form-group">
+              <label for="trade-type">거래 유형</label>
+              <select id="trade-type">
+                <option value="apt-trade">아파트 매매</option>
+                <option value="apt-rent">아파트 전월세</option>
+                <option value="villa-trade" selected>연립다세대 매매</option>
+                <option value="house-trade">단독/다가구 매매</option>
+                <option value="office-trade">오피스텔 매매</option>
+                <option value="office-rent">오피스텔 전월세</option>
+              </select>
+            </div>
+            <div class="form-group period-shortcuts">
+              <label>빠른 기간 선택</label>
+              <div class="period-btn-group">
+                <button type="button" class="btn-period" onclick="setPeriod(1)">직전 1년</button>
+                <button type="button" class="btn-period" onclick="setPeriod(2)">직전 2년</button>
+                <button type="button" class="btn-period" onclick="setPeriod(3)">직전 3년</button>
+                <button type="button" class="btn-period" onclick="setPeriod(4)">직전 4년</button>
+                <button type="button" class="btn-period" onclick="setPeriod(5)">직전 5년</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>조회 시작</label>
+              <div class="date-range-group">
+                <select id="deal-year-start"></select>
+                <select id="deal-month-start">
+                  <option value="01">1월</option><option value="02">2월</option>
+                  <option value="03">3월</option><option value="04">4월</option>
+                  <option value="05">5월</option><option value="06">6월</option>
+                  <option value="07">7월</option><option value="08">8월</option>
+                  <option value="09">9월</option><option value="10">10월</option>
+                  <option value="11">11월</option><option value="12">12월</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>조회 종료</label>
+              <div class="date-range-group">
+                <select id="deal-year-end"></select>
+                <select id="deal-month-end">
+                  <option value="01">1월</option><option value="02">2월</option>
+                  <option value="03">3월</option><option value="04">4월</option>
+                  <option value="05">5월</option><option value="06">6월</option>
+                  <option value="07">7월</option><option value="08">8월</option>
+                  <option value="09">9월</option><option value="10">10월</option>
+                  <option value="11">11월</option><option value="12">12월</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ③ 상세 필터 -->
+        <div class="form-section form-section--filter">
+          <div class="form-section-header">상세 필터</div>
+          <div class="section-grid">
+            <div class="form-group">
+              <label>전용면적 (㎡)</label>
+              <div class="area-range-group">
+                <input type="number" id="filter-area-min" placeholder="최소" min="0" oninput="applyFilters()">
+                <span class="range-sep">~</span>
+                <input type="number" id="filter-area-max" placeholder="최대" min="0" oninput="applyFilters()">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>층수</label>
+              <div class="area-range-group">
+                <input type="number" id="filter-floor-min" placeholder="최소" min="1" oninput="applyFilters()">
+                <span class="range-sep">~</span>
+                <input type="number" id="filter-floor-max" placeholder="최대" min="1" oninput="applyFilters()">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>건축년도</label>
+              <div class="area-range-group">
+                <input type="number" id="filter-year-min" placeholder="시작" min="1900" max="2100" oninput="applyFilters()">
+                <span class="range-sep">~</span>
+                <input type="number" id="filter-year-max" placeholder="종료" min="1900" max="2100" oninput="applyFilters()">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 조회 버튼 -->
+        <button id="search-btn" class="btn btn-primary btn-search-submit" onclick="handleSearch()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          조회하기
+        </button>
+
+      </div><!-- form-sections -->
+      </div><!-- sidebar-body -->
+
+      <!-- 사이드바 하단 메뉴 -->
+      <div class="sidebar-footer">
+        <button class="btn-sidebar-menu" onclick="openHistoryModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          조회 이력
+        </button>
+        <button class="btn-sidebar-menu" onclick="openAdminModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          계정 관리
+        </button>
+        <button class="btn-sidebar-menu btn-sidebar-menu--logout" onclick="handleLogout()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          로그아웃
+        </button>
+      </div>
+
+    </aside><!-- sidebar -->
+
+    <!-- 오른쪽 콘텐츠 -->
+    <div class="content">
+
+      <!-- 초기 안내 -->
+      <div id="empty-state" class="empty-state">
+        <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <p>좌측에서 지역과 조건을 선택한 후<br><strong>조회하기</strong>를 클릭하세요.</p>
+      </div>
+
+      <!-- 결과 패널 -->
+      <section class="card" id="results-section" style="display:none">
+        <div class="section-header">
+          <h2 class="card-title">
+            조회 결과
+            <span class="badge" id="results-badge"></span>
+          </h2>
+          <div class="results-controls">
+            <select id="page-size" onchange="changePageSize()">
+              <option value="30">30개</option>
+              <option value="50">50개</option>
+              <option value="100">100개</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="exportCSV()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              CSV 다운로드
+            </button>
+          </div>
+        </div>
+        <div class="results-layout">
+          <div class="results-left">
+            <div class="table-wrap">
+              <table id="results-table">
+                <thead id="results-thead"></thead>
+                <tbody id="results-tbody"></tbody>
+              </table>
+            </div>
+            <div id="pagination" class="pagination"></div>
+          </div>
+
+          <div id="analysis-panel" class="analysis-panel" style="display:none">
+            <div class="analysis-header">
+              <span class="analysis-title">평단가 분석</span>
+              <button class="btn-clear-sel" onclick="clearSelection()" title="선택 해제">✕</button>
+            </div>
+            <div class="analysis-count"><span id="analysis-count-num">0</span>건 선택됨</div>
+            <p id="analysis-basis" class="analysis-basis">거래금액 기준</p>
+            <div class="analysis-stats">
+              <div class="stat-item stat-item--accent">
+                <span class="stat-label">평균 평단가</span>
+                <span class="stat-value" id="stat-avg">-</span>
+              </div>
+              <div class="stat-divider"></div>
+              <div class="stat-item">
+                <span class="stat-label">최소 평단가</span>
+                <span class="stat-value" id="stat-min">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">최대 평단가</span>
+                <span class="stat-value" id="stat-max">-</span>
+              </div>
+              <div class="stat-divider"></div>
+              <div class="stat-item">
+                <span class="stat-label" id="stat-amount-label">평균 거래금액</span>
+                <span class="stat-value" id="stat-avg-amount">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label" id="stat-area-label">평균 전용면적</span>
+                <span class="stat-value" id="stat-avg-area">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- content -->
+
+  </div><!-- app-layout -->
+
+  <!-- ── 조회이력 모달 ── -->
+  <div id="history-modal" class="modal-backdrop" style="display:none" onclick="closeHistoryOutside(event)">
+    <div class="modal modal--history">
+      <div class="history-modal-header">
+        <h3 class="modal-title">조회 이력</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost btn-sm" onclick="loadHistory()">새로고침</button>
+          <button class="btn-modal-close" onclick="closeHistoryModal()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="history-toolbar" class="history-toolbar" style="display:none">
+        <label class="history-select-all-label">
+          <input type="checkbox" id="history-select-all-chk" onchange="toggleHistorySelectAll(this.checked)">
+          전체선택
+        </label>
+        <span id="history-selected-count" class="history-selected-count"></span>
+        <div class="history-toolbar-actions">
+          <button class="btn btn-outline btn-sm" onclick="deleteSelectedHistory()">선택 삭제</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAllHistory()">전체 삭제</button>
+        </div>
+      </div>
+      <div id="history-modal-list" class="history-modal-body">
+        <p class="empty-msg">조회 이력이 없습니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 로딩 오버레이 ── -->
+  <div id="loading" class="loading-overlay" style="display:none">
+    <div class="spinner-box">
+      <div class="spinner"></div>
+      <p>데이터를 조회하는 중입니다…</p>
+    </div>
+  </div>
+
+  <!-- ── 토스트 ── -->
+  <div id="toast" class="toast"></div>
+
+  <!-- ── 계정 관리 모달 ── -->
+  <div id="admin-modal" class="modal-backdrop" style="display:none" onclick="closeAdminOutside(event)">
+    <div class="modal">
+      <h3 class="modal-title">계정 관리</h3>
+
+      <!-- 탭 -->
+      <div class="admin-tabs">
+        <button class="admin-tab active" onclick="switchAdminTab('account')">계정 정보</button>
+        <button class="admin-tab" onclick="switchAdminTab('recovery')">복구 정보</button>
+      </div>
+
+      <!-- 탭 1: 계정 정보 -->
+      <div id="admin-tab-account">
+        <p class="modal-desc">아이디 및 비밀번호를 변경합니다.<br>변경 후 새 정보로 다시 로그인해 주세요.</p>
+        <div class="form-group">
+          <label for="admin-cur-pw">현재 비밀번호</label>
+          <input type="password" id="admin-cur-pw" placeholder="현재 비밀번호 입력" />
+        </div>
+        <div class="form-group">
+          <label for="admin-new-id">새 아이디</label>
+          <input type="text" id="admin-new-id" placeholder="새 아이디 입력" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="admin-new-pw">새 비밀번호</label>
+          <input type="password" id="admin-new-pw" placeholder="새 비밀번호 입력" />
+        </div>
+        <div id="admin-error" class="form-error" style="display:none"></div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeAdminModal()">취소</button>
+          <button class="btn btn-primary" onclick="handleChangeCredentials()">변경하기</button>
+        </div>
+      </div>
+
+      <!-- 탭 2: 복구 정보 -->
+      <div id="admin-tab-recovery" style="display:none">
+        <p class="modal-desc">비밀번호 찾기에 사용되는 정보를 변경합니다.</p>
+        <div class="form-group">
+          <label for="rec-cur-pw">현재 비밀번호</label>
+          <input type="password" id="rec-cur-pw" placeholder="현재 비밀번호 입력" />
+        </div>
+        <div class="form-group">
+          <label for="rec-new-name">이름</label>
+          <input type="text" id="rec-new-name" placeholder="이름 입력" maxlength="10" />
+        </div>
+        <div class="form-group">
+          <label for="rec-new-phone">전화번호 끝 4자리</label>
+          <input type="text" id="rec-new-phone" placeholder="예: 1234" maxlength="4" inputmode="numeric" />
+        </div>
+        <div class="form-group">
+          <label for="rec-new-birth">생년월일 <span class="hint">(6자리)</span></label>
+          <input type="text" id="rec-new-birth" placeholder="생년월일 6자리" maxlength="6" inputmode="numeric" />
+        </div>
+        <div class="form-group">
+          <label for="rec-new-pin">PIN번호 <span class="hint">(6자리)</span></label>
+          <input type="password" id="rec-new-pin" placeholder="PIN 6자리" maxlength="6" inputmode="numeric" />
+        </div>
+        <div id="recovery-change-error" class="form-error" style="display:none"></div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeAdminModal()">취소</button>
+          <button class="btn btn-primary" onclick="handleChangeRecovery()">변경하기</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 설정 모달 ── -->
+  <div id="settings-modal" class="modal-backdrop" style="display:none" onclick="closeSettingsOutside(event)">
+    <div class="modal">
+      <h3 class="modal-title">API 키 설정</h3>
+      <p class="modal-desc">
+        <a href="https://www.data.go.kr" target="_blank">공공데이터포털(data.go.kr)</a>에서
+        발급받은 서비스키를 입력하세요.<br/>
+        입력한 키는 브라우저에만 저장되며 서버로 안전하게 전달됩니다.
+      </p>
+      <div class="form-group">
+        <label for="api-key-input">서비스키 (Service Key)</label>
+        <input type="text" id="api-key-input" placeholder="인증키를 붙여넣으세요" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeSettings()">취소</button>
+        <button class="btn btn-primary" onclick="saveSettings()">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
