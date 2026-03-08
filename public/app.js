@@ -1011,6 +1011,9 @@ function openAdminModal() {
     .forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('admin-error').style.display = 'none';
   document.getElementById('recovery-change-error').style.display = 'none';
+  /* 현재 아이디를 새 아이디 입력란에 미리 채움 */
+  const curId = document.getElementById('header-user')?.textContent?.trim();
+  if (curId) document.getElementById('admin-new-id').value = curId;
   switchAdminTab('account');
   document.getElementById('admin-modal').style.display = 'grid';
 }
