@@ -101,6 +101,24 @@ app.post('/auth/recover', async (req, res) => {
   }
 });
 
+app.post('/auth/recover-reset', async (req, res) => {
+  const { name, phone_last4, birthdate, pin, newPassword } = req.body;
+  if (!newPassword) return res.json({ success: false, error: '새 비밀번호를 입력해주세요.' });
+  try {
+    const cfg = await auth.getAuth();
+    const r   = cfg.recovery;
+    if (name !== r.name || phone_last4 !== r.phone_last4 ||
+        birthdate !== r.birthdate || pin !== r.pin) {
+      return res.json({ success: false, error: '인증 정보가 일치하지 않습니다.' });
+    }
+    cfg.password = newPassword;
+    await auth.saveAuth(cfg);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
+  }
+});
+
 /* ──────────────────────────────────────────
    이후 모든 라우트는 로그인 필요
 ────────────────────────────────────────── */

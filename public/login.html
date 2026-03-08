@@ -47,7 +47,7 @@
           </svg>
         </button>
       </div>
-      <p class="recover-desc">등록된 정보를 입력하면 비밀번호를 확인할 수 있습니다.</p>
+      <p class="recover-desc">등록된 정보를 입력하면 비밀번호를 변경할 수 있습니다.</p>
 
       <div id="recover-form-wrap">
         <div class="field-group">
@@ -70,9 +70,22 @@
         <button class="btn-login" onclick="handleRecover()">확인</button>
       </div>
 
+      <div id="recover-new-pw-wrap" style="display:none">
+        <p class="recover-desc" style="margin-bottom:16px">본인 확인 완료. 새 비밀번호를 입력하세요.</p>
+        <div class="field-group">
+          <label>새 비밀번호</label>
+          <input type="password" id="rec-new-pw" placeholder="새 비밀번호 입력" />
+        </div>
+        <div class="field-group">
+          <label>새 비밀번호 확인</label>
+          <input type="password" id="rec-new-pw-confirm" placeholder="새 비밀번호 재입력" />
+        </div>
+        <div id="recover-reset-error" class="login-error" style="display:none"></div>
+        <button class="btn-login" onclick="handleRecoverReset()">비밀번호 변경</button>
+      </div>
+
       <div id="recover-result" class="recover-result" style="display:none">
-        <p class="recover-result-label">내 비밀번호</p>
-        <div class="recover-pw-box" id="recover-pw-display"></div>
+        <p class="recover-result-label">비밀번호가 변경되었습니다.</p>
         <button class="btn-login" style="margin-top:16px" onclick="closeRecover()">로그인 화면으로</button>
       </div>
     </div>
@@ -113,14 +126,18 @@
       }
     }
 
+    let _recoverInfo = null; // 인증 성공 후 복구 정보 임시 보관
+
     function openRecover() {
       document.getElementById('recover-modal').style.display = 'flex';
       document.getElementById('recover-form-wrap').style.display = '';
+      document.getElementById('recover-new-pw-wrap').style.display = 'none';
       document.getElementById('recover-result').style.display = 'none';
       document.getElementById('recover-error').style.display = 'none';
-      ['rec-name','rec-phone','rec-birth','rec-pin'].forEach(id => {
+      ['rec-name','rec-phone','rec-birth','rec-pin','rec-new-pw','rec-new-pw-confirm'].forEach(id => {
         document.getElementById(id).value = '';
       });
+      _recoverInfo = null;
     }
     function closeRecover() {
       document.getElementById('recover-modal').style.display = 'none';
@@ -151,11 +168,49 @@
         });
         const data = await res.json();
         if (data.success) {
+          _recoverInfo = { name, phone_last4: phone, birthdate: birth, pin };
           document.getElementById('recover-form-wrap').style.display = 'none';
-          document.getElementById('recover-pw-display').textContent = data.password;
-          document.getElementById('recover-result').style.display = '';
+          document.getElementById('recover-new-pw-wrap').style.display = '';
+          document.getElementById('rec-new-pw').focus();
         } else {
           err.textContent   = data.error || '입력 정보가 일치하지 않습니다.';
+          err.style.display = 'block';
+        }
+      } catch (_) {
+        err.textContent   = '서버 오류가 발생했습니다.';
+        err.style.display = 'block';
+      }
+    }
+
+    async function handleRecoverReset() {
+      const newPw      = document.getElementById('rec-new-pw').value;
+      const newPwConf  = document.getElementById('rec-new-pw-confirm').value;
+      const err        = document.getElementById('recover-reset-error');
+      err.style.display = 'none';
+
+      if (!newPw) {
+        err.textContent = '새 비밀번호를 입력해주세요.';
+        err.style.display = 'block';
+        return;
+      }
+      if (newPw !== newPwConf) {
+        err.textContent = '비밀번호가 일치하지 않습니다.';
+        err.style.display = 'block';
+        return;
+      }
+
+      try {
+        const res  = await fetch('/auth/recover-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ..._recoverInfo, newPassword: newPw }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('recover-new-pw-wrap').style.display = 'none';
+          document.getElementById('recover-result').style.display = '';
+        } else {
+          err.textContent   = data.error || '비밀번호 변경에 실패했습니다.';
           err.style.display = 'block';
         }
       } catch (_) {
