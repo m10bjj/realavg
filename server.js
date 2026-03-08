@@ -8,8 +8,12 @@ const path         = require('path');
 const fs           = require('fs');
 const https        = require('https');
 const http         = require('http');
+const multer       = require('multer');
+const XLSX         = require('xlsx');
 const db           = require('./db');
 const auth         = require('./auth');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 const app        = express();
 const PORT       = process.env.PORT || 3000;
@@ -433,6 +437,335 @@ app.delete('/api/history/all', async (_req, res) => {
 
 app.delete('/api/history/:id', async (req, res) => {
   try { await db.deleteSearch(parseInt(req.params.id, 10)); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ──────────────────────────────────────────
+   경매 API
+────────────────────────────────────────── */
+
+/** 금액 파싱: Excel 원(₩) 단위 → 만원 단위 정수 */
+function parseAmount(val) {
+  if (val == null || val === '') return null;
+  const str = val.toString().replace(/[,\s]/g, '');
+  const num = parseFloat(str);
+  if (isNaN(num)) return null;
+  // Excel 값이 원(₩) 단위이므로 만원으로 변환
+  return Math.round(num / 10000);
+}
+
+/** 날짜 파싱: Excel 숫자 직렬 or 문자열 → 'YYYY-MM-DD' */
+function parseBidDate(val) {
+  if (val == null || val === '') return null;
+  if (typeof val === 'number') {
+    const d = XLSX.SSF.parse_date_code(val);
+    if (d) return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+  }
+  return val.toString().trim() || null;
+}
+
+/** 평수 파싱: "25.85㎡ (7.82평)" 형식에서 평 값 추출, 순수 숫자도 허용 */
+function parsePyeong(val) {
+  if (val == null) return null;
+  const str = val.toString();
+  const m = str.match(/\(([0-9.]+)평\)/);
+  if (m) return parseFloat(m[1]) || null;
+  const n = parseFloat(str);
+  return isNaN(n) ? null : n;
+}
+
+/** 주소에서 층수 추출: "5층", "(3층)", "B2층" 등 */
+function parseFloor(address) {
+  if (!address) return null;
+  const s = address.toString();
+  // 지하층: B1, 지1, 지하1 → 음수
+  const basem = s.match(/(?:B|지하|지)\s*(\d+)\s*층/i);
+  if (basem) return -parseInt(basem[1], 10);
+  // 지상층: 숫자+층
+  const m = s.match(/(\d{1,3})\s*층/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** 상태 정규화: "진행" → "진행중" */
+function normalizeStatus(val) {
+  if (!val) return null;
+  const s = val.toString().trim();
+  if (s === '진행') return '진행중';
+  return s;
+}
+
+/** Excel 행 → auction 객체 매핑 */
+function mapExcelRow(row) {
+  const g = (...keys) => {
+    for (const k of keys) {
+      const v = row[k];
+      if (v !== null && v !== undefined && v !== '') return v;
+    }
+    return null;
+  };
+  return {
+    case_no:         g('경매사건번호')?.toString().trim() || null,
+    item_type:       g('물건종류')?.toString().trim() || null,
+    region:          g('지역')?.toString().trim() || null,
+    bid_date:        parseBidDate(g('입찰일')),
+    status:          normalizeStatus(g('상태')),
+    appraisal_price: parseAmount(g('감정가')),
+    winning_price:   parseAmount(g('낙찰가')),
+    min_price:       parseAmount(g('최저가')),
+    official_price:  parseAmount(g('공시')),
+    jeonse_market:   parseAmount(g('전세 시세', '전세시세')),
+    sale_market:     parseAmount(g('매매 시세', '매매시세')),
+    building_area:   parsePyeong(g('건물평수')),
+    land_area:       parsePyeong(g('대지평수')),
+    address:         g('주소')?.toString().trim() || null,
+    floor:           parseFloor(g('주소')?.toString()),
+    notes:           g('체크사항')?.toString().trim() || null,
+  };
+}
+
+/* GET /api/auction/template – 업로드 양식 엑셀 다운로드 */
+app.get('/api/auction/template', requireAuth, (_req, res) => {
+  const headers = [
+    '순번', '경매사건번호', '물건종류', '지역', '입찰일', '상태',
+    '감정가', '낙찰가', '최저가', '공시',
+    '전세 시세', '전세 차익', '매매 시세', '매매 차익',
+    '건물평수', '대지평수', '주소', '체크사항',
+  ];
+  const sample = [
+    1, '2025타경12345', '아파트', '수원', '2026-03-15', '진행중',
+    390000000, '', 273000000, 280000000,
+    '', '', '', '',
+    '7.82평 (25.85㎡)', '10.5평 (34.71㎡)', '경기도 수원시 팔달구 XX동 123-4', '주차 협소',
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
+  // 열 너비 설정
+  ws['!cols'] = headers.map((h, i) => {
+    const widths = [6,18,10,8,12,8,14,14,14,14,12,12,12,12,12,12,30,20];
+    return { wch: widths[i] || 12 };
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '경매목록');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Disposition', 'attachment; filename*=UTF-8\'\'%EB%B6%80%EB%8F%99%EC%82%B0%EA%B2%BD%EB%A7%A4_%EC%97%85%EB%A1%9C%EB%93%9C_%EC%96%91%EC%8B%9D.xlsx');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
+
+/* GET /api/auction */
+app.get('/api/auction', async (_req, res) => {
+  try { res.json(await db.getAuctions()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* POST /api/auction/upload  (multipart: field name = "file") */
+app.post('/api/auction/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: '파일이 없습니다.' });
+
+  // multer 는 latin1 로 파일명을 받으므로 UTF-8 로 복원
+  const filename = Buffer.from(req.file.originalname || '', 'latin1').toString('utf8');
+
+  try {
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: false });
+
+    // "경매목록" 시트 우선, 없으면 첫 번째 시트
+    const sheetName = wb.SheetNames.find(n => n === '경매목록') || wb.SheetNames[0];
+    if (!sheetName) return res.status(400).json({ error: 'Excel 시트를 찾을 수 없습니다.' });
+
+    const ws  = wb.Sheets[sheetName];
+    // raw 배열로 읽기 → 앞의 제목/빈 행을 건너뛰고 헤더 행 탐지
+    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+    // '순번'이 있는 행을 헤더로 인식
+    const headerRowIdx = raw.findIndex(row =>
+      Array.isArray(row) && row.some(v => v && v.toString().trim() === '순번')
+    );
+    if (headerRowIdx === -1)
+      return res.status(400).json({ error: '헤더 행(순번 컬럼)을 찾을 수 없습니다. 경매목록 시트의 형식을 확인하세요.' });
+
+    // 헤더: 중복 키는 마지막 인덱스 우선 (체크사항 등)
+    const headers = raw[headerRowIdx].map(h => (h != null ? h.toString().trim() : null));
+    const headerToIdx = {};
+    headers.forEach((h, i) => { if (h) headerToIdx[h] = i; });
+
+    // 데이터 행: 빈 행 제거
+    const dataRows = raw.slice(headerRowIdx + 1).filter(r =>
+      Array.isArray(r) && r.some(v => v !== null && v !== undefined && v !== '')
+    );
+    if (!dataRows.length) return res.status(400).json({ error: '데이터가 없습니다.' });
+
+    // 배열 행 → 헤더 키 객체 변환
+    const rowObjects = dataRows.map(row => {
+      const obj = {};
+      Object.entries(headerToIdx).forEach(([key, idx]) => {
+        obj[key] = (row[idx] !== undefined) ? row[idx] : null;
+      });
+      return obj;
+    });
+
+    console.log(`[auction upload] 파일: ${filename}, 시트: ${sheetName}, 헤더행: ${headerRowIdx + 1}, 데이터: ${rowObjects.length}행`);
+
+    const mapped = rowObjects.map(mapExcelRow).filter(r => r.case_no);
+    if (!mapped.length) return res.status(400).json({ error: '유효한 데이터 행이 없습니다.' });
+
+    // 같은 파일 내 중복 case_no 제거 (마지막 행 우선)
+    const seenCaseNo = new Map();
+    const noCaseNo   = [];
+    mapped.forEach(r => {
+      if (r.case_no) seenCaseNo.set(r.case_no, r);
+      else noCaseNo.push(r);
+    });
+    const auctions = [...seenCaseNo.values(), ...noCaseNo];
+
+    const result = await db.upsertAuctions(auctions);
+    const parts = [`진행중 ${result.upserted - result.markedAsNew}건`];
+    if (result.markedAsNew > 0) parts.push(`신규 ${result.markedAsNew}건`);
+    if (result.markedAsWon > 0) parts.push(`낙찰 ${result.markedAsWon}건`);
+    res.json({
+      success: true,
+      upserted:    result.upserted,
+      markedAsWon: result.markedAsWon,
+      markedAsNew: result.markedAsNew,
+      message: parts.join(', ') + ' 처리완료',
+    });
+  } catch (e) {
+    console.error('auction upload error:', e);
+    const msg = e.message || '';
+    if (msg.includes('schema cache') || msg.includes('Could not find the column')) {
+      return res.status(500).json({ error: `DB 컬럼 오류: ${msg}\nSupabase SQL Editor에서 누락된 컬럼을 추가해주세요.` });
+    }
+    if (msg.includes('does not exist') || msg.includes('Could not find the table')) {
+      return res.status(500).json({ error: 'Supabase에 auctions 테이블이 없습니다. Supabase SQL Editor에서 테이블을 먼저 생성해주세요.' });
+    }
+    res.status(500).json({ error: msg || '업로드 처리 중 오류가 발생했습니다.' });
+  }
+});
+
+/* PUT /api/auction/:id  (매매시세·전세시세 등 단일 필드 수정) */
+app.put('/api/auction/:id', async (req, res) => {
+  const id     = parseInt(req.params.id, 10);
+  const fields = req.body;
+  const allowed = ['sale_market', 'jeonse_market', 'status', 'notes', 'winning_price', 'bid_date'];
+  const safe = {};
+  allowed.forEach(k => { if (k in fields) safe[k] = fields[k]; });
+  if (!Object.keys(safe).length) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
+  try { await db.updateAuction(id, safe); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* DELETE /api/auction/batch */
+app.delete('/api/auction/batch', async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0)
+    return res.status(400).json({ error: 'ids 배열이 필요합니다.' });
+  try { await db.deleteAuctionBatch(ids.map(Number)); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* DELETE /api/auction/all */
+app.delete('/api/auction/all', async (_req, res) => {
+  try { await db.deleteAllAuctions(); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* DELETE /api/auction/:id */
+app.delete('/api/auction/:id', async (req, res) => {
+  try { await db.deleteAuction(parseInt(req.params.id, 10)); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* POST /api/auction/migrate-floor – 기존 주소 데이터에서 층수 일괄 파싱 */
+app.post('/api/auction/migrate-floor', async (_req, res) => {
+  try {
+    const all = await db.getAuctions();
+    const toUpdate = all.filter(r => r.address && r.floor == null);
+    if (!toUpdate.length) return res.json({ success: true, updated: 0, message: '업데이트할 데이터 없음' });
+
+    const supabase = require('./lib/supabase');
+    const CHUNK = 500;
+    let updated = 0;
+    for (let i = 0; i < toUpdate.length; i += CHUNK) {
+      const chunk = toUpdate.slice(i, i + CHUNK);
+      for (const r of chunk) {
+        const floor = parseFloor(r.address);
+        if (floor != null) {
+          await supabase.from('auctions').update({ floor }).eq('id', r.id);
+          updated++;
+        }
+      }
+    }
+    res.json({ success: true, updated, total: toUpdate.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ──────────────────────────────────────────
+   나만의 경매물건 API
+────────────────────────────────────────── */
+
+/* GET /api/my-auction */
+app.get('/api/my-auction', async (_req, res) => {
+  try { res.json(await db.getMyAuctions()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* POST /api/my-auction – 선택한 경매물건 스냅샷 저장 */
+app.post('/api/my-auction', async (req, res) => {
+  const { items } = req.body;
+  if (!Array.isArray(items) || items.length === 0)
+    return res.status(400).json({ error: '저장할 항목이 없습니다.' });
+
+  const snapshot = items.map(r => ({
+    case_no:        r.case_no        || null,
+    item_type:      r.item_type      || null,
+    region:         r.region         || null,
+    address:        r.address        || null,
+    floor:          r.floor          ?? null,
+    appraisal_price:r.appraisal_price ?? null,
+    winning_price:  r.winning_price  ?? null,
+    min_price:      r.min_price      ?? null,
+    official_price: r.official_price ?? null,
+    building_area:  r.building_area  ?? null,
+    land_area:      r.land_area      ?? null,
+    floor_info:     r.floor_info     || null,
+    bid_count:      r.bid_count      ?? null,
+    bid_date:       r.bid_date       || null,
+    court:          r.court          || null,
+    detail_url:     r.detail_url     || null,
+    sale_market:    r.sale_market    ?? null,
+    jeonse_market:  r.jeonse_market  ?? null,
+    notes:          r.notes          || null,
+    my_status:      r.status         || '진행중',
+    my_bid_date:    r.bid_date       || null,
+  }));
+
+  try {
+    const count = await db.addMyAuctions(snapshot);
+    res.json({ success: true, count });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* PATCH /api/my-auction/:id – 편집 가능 필드 수정 */
+app.patch('/api/my-auction/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const allowed = ['my_status', 'my_bid_date', 'winning_price', 'min_price', 'jeonse_market', 'sale_market', 'check_notes'];
+  const safe = {};
+  allowed.forEach(k => { if (k in req.body) safe[k] = req.body[k]; });
+  if (!Object.keys(safe).length) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
+  try { await db.updateMyAuction(id, safe); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* DELETE /api/my-auction/batch */
+app.delete('/api/my-auction/batch', async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0)
+    return res.status(400).json({ error: 'ids 배열이 필요합니다.' });
+  try { await db.deleteMyAuctionBatch(ids.map(Number)); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* DELETE /api/my-auction/:id */
+app.delete('/api/my-auction/:id', async (req, res) => {
+  try { await db.deleteMyAuction(parseInt(req.params.id, 10)); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 

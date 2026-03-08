@@ -1130,3 +1130,910 @@ function showToast(msg, type = '') {
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
+
+/* ═══════════════════════════════════════════════════════
+   뷰 전환 (실거래가 ↔ 부동산경매)
+═══════════════════════════════════════════════════════ */
+let currentView = 'realestate';
+
+function switchView(view) {
+  currentView = view;
+
+  const searchBody        = document.getElementById('sidebar-search-body');
+  const realestateView    = document.getElementById('realestate-view');
+  const auctionView       = document.getElementById('auction-view');
+  const myAuctionView     = document.getElementById('my-auction-view');
+  const historyBtn        = document.getElementById('history-btn');
+  const auctionFilterBody = document.getElementById('sidebar-auction-filter-body');
+  const myAuctionBody     = document.getElementById('sidebar-my-auction-body');
+
+  searchBody.style.display        = view === 'realestate' ? '' : 'none';
+  if (auctionFilterBody) auctionFilterBody.style.display = view === 'auction' ? '' : 'none';
+  if (myAuctionBody)     myAuctionBody.style.display     = view === 'my-auction' ? '' : 'none';
+  realestateView.style.display    = view === 'realestate' ? '' : 'none';
+  auctionView.style.display       = view === 'auction'    ? 'flex' : 'none';
+  if (myAuctionView) myAuctionView.style.display = view === 'my-auction' ? 'flex' : 'none';
+  if (historyBtn) historyBtn.style.display = view === 'realestate' ? '' : 'none';
+
+  document.querySelectorAll('.sidebar-nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.view === view);
+  });
+
+  if (view === 'auction')    loadAuctions();
+  if (view === 'my-auction') loadMyAuctions();
+}
+
+/* ═══════════════════════════════════════════════════════
+   부동산경매
+═══════════════════════════════════════════════════════ */
+let auctionData     = [];
+let auctionFiltered = [];
+let auctionSelected = new Set();
+let auctionPage     = 1;
+let auctionPageSize = 30;
+
+async function loadAuctions() {
+  try {
+    const res  = await fetch('/api/auction');
+    const data = await res.json();
+    auctionData = Array.isArray(data) ? data : [];
+  } catch (_) {
+    auctionData = [];
+  }
+  // 전체 데이터 기준 순번 자동 부여 (1, 2, 3, ...)
+  auctionData.forEach((r, i) => { r._seq = i + 1; });
+  auctionSelected.clear();
+  populateAuctionFilters();
+  applyAuctionFilter();
+
+  // 층수 미설정 데이터 있으면 서버 측 마이그레이션 실행 (백그라운드)
+  if (auctionData.some(r => r.address && r.floor == null)) {
+    fetch('/api/auction/migrate-floor', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => { if (d.updated > 0) loadAuctions(); })
+      .catch(() => {});
+  }
+
+  // Enter 키로 조회
+  document.querySelectorAll('#sidebar-auction-filter-body input[type="number"]').forEach(el => {
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') applyAuctionFilter(); });
+  });
+}
+
+/* 물건종류·지역 셀렉트 옵션 채우기 */
+function populateAuctionFilters() {
+  const types   = [...new Set(auctionData.map(r => r.item_type).filter(Boolean))].sort();
+  const regions = [...new Set(auctionData.map(r => r.region).filter(Boolean))].sort();
+
+  const selType   = document.getElementById('af-item-type');
+  const selRegion = document.getElementById('af-region');
+  if (!selType || !selRegion) return;
+
+  const prevType   = selType.value;
+  const prevRegion = selRegion.value;
+
+  selType.innerHTML   = '<option value="">전체</option>' + types.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  selRegion.innerHTML = '<option value="">전체</option>' + regions.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+
+  // 이전 선택값 복원
+  if (types.includes(prevType))   selType.value   = prevType;
+  if (regions.includes(prevRegion)) selRegion.value = prevRegion;
+}
+
+/* 필터 적용 */
+function applyAuctionFilter() {
+  const itemType    = document.getElementById('af-item-type')?.value || '';
+  const region      = document.getElementById('af-region')?.value   || '';
+  const status      = document.getElementById('af-status')?.value   || '';
+  const floorFrom   = document.getElementById('af-floor-from')?.value !== '' ? parseInt(document.getElementById('af-floor-from')?.value, 10) : null;
+  const floorTo     = document.getElementById('af-floor-to')?.value   !== '' ? parseInt(document.getElementById('af-floor-to')?.value,   10) : null;
+  const minPriceFrom = parseFloat(document.getElementById('af-min-price-from')?.value) || null;
+  const minPriceTo   = parseFloat(document.getElementById('af-min-price-to')?.value)   || null;
+  const officialFrom = parseFloat(document.getElementById('af-official-from')?.value)  || null;
+  const officialTo   = parseFloat(document.getElementById('af-official-to')?.value)    || null;
+  const buildingFrom = parseFloat(document.getElementById('af-building-from')?.value)  || null;
+  const buildingTo   = parseFloat(document.getElementById('af-building-to')?.value)    || null;
+
+  auctionFiltered = auctionData.filter(r => {
+    if (itemType && r.item_type !== itemType) return false;
+    if (region   && r.region    !== region)   return false;
+    if (status   && r.status    !== status)   return false;
+    if (floorFrom !== null && (r.floor == null || r.floor < floorFrom)) return false;
+    if (floorTo   !== null && (r.floor == null || r.floor > floorTo))   return false;
+    // 입력값: 만원 단위, DB 저장값: 만원 단위 → 직접 비교
+    if (minPriceFrom !== null && (r.min_price == null || r.min_price < minPriceFrom)) return false;
+    if (minPriceTo   !== null && (r.min_price == null || r.min_price > minPriceTo))   return false;
+    if (officialFrom !== null && (r.official_price == null || r.official_price < officialFrom)) return false;
+    if (officialTo   !== null && (r.official_price == null || r.official_price > officialTo))   return false;
+    if (buildingFrom !== null && (r.building_area == null || r.building_area < buildingFrom)) return false;
+    if (buildingTo   !== null && (r.building_area == null || r.building_area > buildingTo))   return false;
+    return true;
+  });
+
+  const info = document.getElementById('af-result-count');
+  if (info) {
+    const isFiltered = auctionFiltered.length !== auctionData.length;
+    info.textContent = isFiltered
+      ? `${auctionFiltered.length.toLocaleString()}건 표시 / 전체 ${auctionData.length.toLocaleString()}건`
+      : '';
+    info.style.color = isFiltered ? 'var(--primary)' : '';
+  }
+
+  auctionPage = 1;
+  renderAuctionTable();
+}
+
+/* 필터 초기화 */
+function resetAuctionFilter() {
+  ['af-item-type','af-region','af-status','af-floor-from','af-floor-to',
+   'af-min-price-from','af-min-price-to',
+   'af-official-from','af-official-to','af-building-from','af-building-to']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+  applyAuctionFilter();
+}
+
+/* 금액 표시: 억/만 포맷 (경매용) */
+function fmtAmt(val) {
+  if (val == null || val === '') return '-';
+  const n = parseInt(val, 10);
+  if (isNaN(n) || n === 0) return '-';
+  if (n >= 10000) {
+    const 억 = Math.floor(n / 10000);
+    const 만 = n % 10000;
+    return 만 === 0 ? `${억}억` : `${억}억 ${만.toLocaleString()}만`;
+  }
+  return `${n.toLocaleString()}만`;
+}
+
+/* 차익 계산: 시세 - 최저가 (둘 다 있어야) */
+function calcProfit(market, minPrice) {
+  if (!market || !minPrice) return null;
+  return parseInt(market, 10) - parseInt(minPrice, 10);
+}
+
+/* 상태 배지 클래스 */
+function statusClass(status) {
+  if (!status) return '';
+  if (status === '낙찰')   return 'badge-won';
+  if (status === '신규')   return 'badge-new';
+  if (status === '진행중') return 'badge-active';
+  return 'badge-neutral';
+}
+
+/* 시세 셀 HTML 생성 헬퍼 */
+function marketCellHtml(id, field, val) {
+  const display = val ? fmtAmt(val) : '<span class="waiting">대기</span>';
+  return `<div class="market-cell" data-id="${id}" data-field="${field}">
+    <span class="market-display">${display}</span>
+    <svg class="edit-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  </div>`;
+}
+
+function profitCellClass(pft) {
+  if (pft === null) return 'col-profit';
+  return 'col-profit ' + (pft >= 0 ? 'profit-pos' : 'profit-neg');
+}
+
+function profitCellHtml(pft) {
+  return pft !== null ? fmtAmt(pft) : '<span class="waiting">대기</span>';
+}
+
+function renderAuctionTable() {
+  const tbody  = document.getElementById('auction-tbody');
+  const badge  = document.getElementById('auction-badge');
+  const selBtn = document.getElementById('auction-delete-sel-btn');
+  const selAll = document.getElementById('auction-sel-all');
+
+  const saveMyBtn = document.getElementById('auction-save-my-btn');
+  badge.textContent    = auctionData.length + '건';
+  selBtn.style.display   = auctionSelected.size > 0 ? '' : 'none';
+  if (saveMyBtn) saveMyBtn.style.display = auctionSelected.size > 0 ? '' : 'none';
+
+  if (!auctionData.length) {
+    tbody.innerHTML = '<tr><td colspan="20" class="auction-empty">데이터가 없습니다. 엑셀 파일을 업로드하세요.</td></tr>';
+    document.getElementById('auction-pagination').innerHTML = '';
+    document.getElementById('auction-page-info').textContent = '';
+    return;
+  }
+  if (!auctionFiltered.length) {
+    tbody.innerHTML = '<tr><td colspan="20" class="auction-empty">조건에 맞는 데이터가 없습니다.</td></tr>';
+    document.getElementById('auction-pagination').innerHTML = '';
+    document.getElementById('auction-page-info').textContent = '';
+    return;
+  }
+
+  // 현재 페이지 범위
+  const total      = auctionFiltered.length;
+  const totalPages = Math.ceil(total / auctionPageSize);
+  if (auctionPage > totalPages) auctionPage = totalPages;
+  const start    = (auctionPage - 1) * auctionPageSize;
+  const end      = Math.min(start + auctionPageSize, total);
+  const pageRows = auctionFiltered.slice(start, end);
+
+  // 페이지 정보
+  const pageInfo = document.getElementById('auction-page-info');
+  if (pageInfo) pageInfo.textContent = `${start + 1}–${end} / 전체 ${total.toLocaleString()}건`;
+
+  // selAll 상태
+  if (selAll) {
+    const pageSelected = pageRows.filter(r => auctionSelected.has(r.id)).length;
+    selAll.indeterminate = pageSelected > 0 && pageSelected < pageRows.length;
+    selAll.checked       = pageRows.length > 0 && pageSelected === pageRows.length;
+  }
+
+  tbody.innerHTML = pageRows.map(row => {
+    const jeonsePft = calcProfit(row.jeonse_market, row.min_price);
+    const salePft   = calcProfit(row.sale_market, row.min_price);
+    const sc        = statusClass(row.status);
+    return `<tr data-id="${row.id}" class="${auctionSelected.has(row.id) ? 'row-selected' : ''}">
+      <td class="col-chk"><input type="checkbox" ${auctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleAuctionRow(${row.id}, this.checked)"></td>
+      <td class="col-seq">${row._seq ?? '-'}</td>
+      <td class="col-case">${esc(row.case_no)}</td>
+      <td class="col-type">${esc(row.item_type)}</td>
+      <td class="col-region">${esc(row.region)}</td>
+      <td class="col-date">${esc(row.bid_date)}</td>
+      <td class="col-status"><span class="status-badge ${sc}">${esc(row.status) || '-'}</span></td>
+      <td class="col-price">${fmtAmt(row.appraisal_price)}</td>
+      <td class="col-price">${fmtAmt(row.winning_price)}</td>
+      <td class="col-price">${fmtAmt(row.min_price)}</td>
+      <td class="col-price">${fmtAmt(row.official_price)}</td>
+      <td class="col-market">${marketCellHtml(row.id, 'jeonse_market', row.jeonse_market)}</td>
+      <td class="${profitCellClass(jeonsePft)}">${profitCellHtml(jeonsePft)}</td>
+      <td class="col-market">${marketCellHtml(row.id, 'sale_market', row.sale_market)}</td>
+      <td class="${profitCellClass(salePft)}">${profitCellHtml(salePft)}</td>
+      <td class="col-floor">${row.floor != null ? row.floor + '층' : '-'}</td>
+      <td class="col-area">${row.building_area != null ? row.building_area : '-'}</td>
+      <td class="col-area">${row.land_area != null ? row.land_area : '-'}</td>
+      <td class="col-addr" title="${esc(row.address)}">${esc(row.address)}</td>
+      <td class="col-notes" title="${esc(row.notes)}">${esc(row.notes)}</td>
+      <td class="col-del"><button class="btn-row-del" onclick="deleteOneAuction(${row.id})" title="삭제">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  // market-cell 클릭 이벤트 위임 (tbody 단 1개만 등록)
+  tbody.onclick = e => {
+    const cell = e.target.closest('.market-cell');
+    if (cell) startEditMarket(cell);
+  };
+
+  renderAuctionPagination(totalPages);
+}
+
+function renderAuctionPagination(totalPages) {
+  const el = document.getElementById('auction-pagination');
+  if (!el) return;
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const p = auctionPage;
+  const btn = (label, page, disabled, active) =>
+    `<button class="page-btn${active ? ' active' : ''}" ${disabled ? 'disabled' : `onclick="changeAuctionPage(${page})"`}>${label}</button>`;
+
+  let html = btn('«', 1, p === 1, false) + btn('‹', p - 1, p === 1, false);
+
+  const range = 2;
+  const pages = new Set([1, totalPages]);
+  for (let i = Math.max(1, p - range); i <= Math.min(totalPages, p + range); i++) pages.add(i);
+  const sorted = [...pages].sort((a, b) => a - b);
+
+  let prev = 0;
+  sorted.forEach(pg => {
+    if (prev && pg - prev > 1) html += `<span class="page-ellipsis">…</span>`;
+    html += btn(pg, pg, false, pg === p);
+    prev = pg;
+  });
+
+  html += btn('›', p + 1, p === totalPages, false) + btn('»', totalPages, p === totalPages, false);
+  el.innerHTML = html;
+}
+
+function changeAuctionPage(page) {
+  auctionPage = page;
+  renderAuctionTable();
+  document.getElementById('auction-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function changeAuctionPageSize() {
+  auctionPageSize = parseInt(document.getElementById('auction-page-size').value, 10);
+  auctionPage = 1;
+  renderAuctionTable();
+}
+
+/* 해당 행의 시세·차익 셀만 DOM 업데이트 (전체 재렌더 없음) */
+function refreshAuctionRow(id) {
+  const row = auctionData.find(r => r.id === id);
+  if (!row) return;
+  const tr = document.querySelector(`#auction-tbody tr[data-id="${id}"]`);
+  if (!tr) return;
+
+  const jeonsePft = calcProfit(row.jeonse_market, row.min_price);
+  const salePft   = calcProfit(row.sale_market, row.min_price);
+  const cells     = tr.querySelectorAll('td');
+
+  // col 순서: 0체크, 1순번, 2사건번호, 3종류, 4지역, 5입찰일, 6상태, 7감정가, 8낙찰가, 9최저가, 10공시
+  // 11전세시세, 12전세차익, 13매매시세, 14매매차익
+  cells[11].innerHTML = marketCellHtml(row.id, 'jeonse_market', row.jeonse_market);
+  cells[12].className = profitCellClass(jeonsePft);
+  cells[12].innerHTML = profitCellHtml(jeonsePft);
+  cells[13].innerHTML = marketCellHtml(row.id, 'sale_market', row.sale_market);
+  cells[14].className = profitCellClass(salePft);
+  cells[14].innerHTML = profitCellHtml(salePft);
+}
+
+function esc(v) {
+  if (v == null) return '-';
+  return v.toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* 인라인 편집: 시세 셀 클릭 → input 전환 */
+function startEditMarket(cell) {
+  if (cell.querySelector('input')) return;
+
+  const id      = parseInt(cell.dataset.id, 10);
+  const field   = cell.dataset.field;
+  const rowData = auctionData.find(r => r.id === id);
+  const curVal  = rowData ? rowData[field] : null;
+
+  const display = cell.querySelector('.market-display');
+  const icon    = cell.querySelector('.edit-icon');
+  display.style.display = 'none';
+  if (icon) icon.style.display = 'none';
+
+  const input = document.createElement('input');
+  input.type        = 'number';
+  input.className   = 'market-input';
+  input.placeholder = '만원 단위';
+  input.value       = curVal ?? '';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+
+  const save = async () => {
+    const val = input.value.trim() === '' ? null : parseInt(input.value, 10);
+    input.remove();
+    display.style.display = '';
+    if (icon) icon.style.display = '';
+
+    try {
+      const res = await fetch(`/api/auction/${id}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ [field]: val }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || '저장 실패');
+      if (rowData) rowData[field] = val;
+      refreshAuctionRow(id);   // 해당 행만 업데이트
+    } catch (e) {
+      showToast('저장 실패: ' + e.message, 'error');
+    }
+  };
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { input.blur(); }
+    if (e.key === 'Escape') {
+      input.removeEventListener('blur', save);
+      input.remove();
+      display.style.display = '';
+      if (icon) icon.style.display = '';
+    }
+  });
+}
+
+/* 체크박스: 해당 행 class만 토글 (전체 재렌더 없음) */
+function toggleAuctionRow(id, checked) {
+  if (checked) auctionSelected.add(id);
+  else auctionSelected.delete(id);
+
+  const tr = document.querySelector(`#auction-tbody tr[data-id="${id}"]`);
+  if (tr) tr.classList.toggle('row-selected', checked);
+
+  const selAll = document.getElementById('auction-sel-all');
+  const selBtn    = document.getElementById('auction-delete-sel-btn');
+  const saveMyBtn = document.getElementById('auction-save-my-btn');
+  const filteredSelected = auctionFiltered.filter(r => auctionSelected.has(r.id)).length;
+  if (selAll) selAll.indeterminate = filteredSelected > 0 && filteredSelected < auctionFiltered.length;
+  if (selAll) selAll.checked = auctionFiltered.length > 0 && filteredSelected === auctionFiltered.length;
+  if (selBtn)    selBtn.style.display    = auctionSelected.size > 0 ? '' : 'none';
+  if (saveMyBtn) saveMyBtn.style.display = auctionSelected.size > 0 ? '' : 'none';
+}
+
+function toggleAuctionSelAll(checked) {
+  const start    = (auctionPage - 1) * auctionPageSize;
+  const pageRows = auctionFiltered.slice(start, start + auctionPageSize);
+  if (checked) pageRows.forEach(r => auctionSelected.add(r.id));
+  else         pageRows.forEach(r => auctionSelected.delete(r.id));
+
+  document.querySelectorAll('#auction-tbody tr[data-id]').forEach(tr => {
+    tr.classList.toggle('row-selected', checked);
+    const chk = tr.querySelector('input[type="checkbox"]');
+    if (chk) chk.checked = checked;
+  });
+
+  const selBtn    = document.getElementById('auction-delete-sel-btn');
+  const saveMyBtn = document.getElementById('auction-save-my-btn');
+  if (selBtn)    selBtn.style.display    = auctionSelected.size > 0 ? '' : 'none';
+  if (saveMyBtn) saveMyBtn.style.display = auctionSelected.size > 0 ? '' : 'none';
+}
+
+/* 삭제 */
+async function deleteOneAuction(id) {
+  if (!confirm('이 항목을 삭제하겠습니까?')) return;
+  try {
+    await fetch(`/api/auction/${id}`, { method: 'DELETE' });
+    auctionData     = auctionData.filter(r => r.id !== id);
+    auctionFiltered = auctionFiltered.filter(r => r.id !== id);
+    auctionSelected.delete(id);
+    renderAuctionTable();
+    showToast('삭제했습니다.');
+  } catch (e) {
+    showToast('삭제 실패: ' + e.message, 'error');
+  }
+}
+
+async function deleteSelectedAuctions() {
+  if (!auctionSelected.size) return;
+  if (!confirm(`선택한 ${auctionSelected.size}건을 삭제하겠습니까?`)) return;
+  try {
+    await fetch('/api/auction/batch', {
+      method:  'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ids: [...auctionSelected] }),
+    });
+    auctionData     = auctionData.filter(r => !auctionSelected.has(r.id));
+    auctionFiltered = auctionFiltered.filter(r => !auctionSelected.has(r.id));
+    auctionSelected.clear();
+    renderAuctionTable();
+    showToast('선택 항목을 삭제했습니다.');
+  } catch (e) {
+    showToast('삭제 실패: ' + e.message, 'error');
+  }
+}
+
+async function deleteAllAuctions() {
+  if (!auctionData.length) return;
+  if (!confirm('전체 경매 데이터를 삭제하겠습니까?')) return;
+  try {
+    await fetch('/api/auction/all', { method: 'DELETE' });
+    auctionData     = [];
+    auctionFiltered = [];
+    auctionSelected.clear();
+    renderAuctionTable();
+    showToast('전체 삭제했습니다.');
+  } catch (e) {
+    showToast('삭제 실패: ' + e.message, 'error');
+  }
+}
+
+/* 엑셀 다운로드 */
+function downloadAuctionExcel() {
+  const data = auctionFiltered.length ? auctionFiltered : auctionData;
+  if (!data.length) { showToast('다운로드할 데이터가 없습니다.', 'error'); return; }
+
+  const headers = [
+    '순번', '경매사건번호', '물건종류', '지역', '입찰일', '상태',
+    '감정가(만원)', '낙찰가(만원)', '최저가(만원)', '공시(만원)',
+    '전세시세(만원)', '전세차익(만원)', '매매시세(만원)', '매매차익(만원)',
+    '층수', '건물평수', '대지평수', '주소', '체크사항',
+  ];
+
+  const rows = data.map(r => {
+    const jeonsePft = calcProfit(r.jeonse_market, r.min_price);
+    const salePft   = calcProfit(r.sale_market,   r.min_price);
+    return [
+      r._seq          ?? '',
+      r.case_no       ?? '',
+      r.item_type     ?? '',
+      r.region        ?? '',
+      r.bid_date      ?? '',
+      r.status        ?? '',
+      r.appraisal_price ?? '',
+      r.winning_price   ?? '',
+      r.min_price       ?? '',
+      r.official_price  ?? '',
+      r.jeonse_market   ?? '',
+      jeonsePft         ?? '',
+      r.sale_market     ?? '',
+      salePft           ?? '',
+      r.floor           ?? '',
+      r.building_area   ?? '',
+      r.land_area       ?? '',
+      r.address         ?? '',
+      r.notes           ?? '',
+    ];
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+  // 열 너비 설정
+  ws['!cols'] = [
+    { wch: 6 }, { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 8 },
+    { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+    { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+    { wch: 6 }, { wch: 10 }, { wch: 10 }, { wch: 30 }, { wch: 20 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '경매목록');
+
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const isFiltered = auctionFiltered.length !== auctionData.length;
+  XLSX.writeFile(wb, `부동산경매_${isFiltered ? '필터' : '전체'}_${today}.xlsx`);
+  showToast(`${data.length.toLocaleString()}건 다운로드 완료`);
+}
+
+/* 엑셀 업로드 */
+async function handleAuctionUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = ''; // 같은 파일 재업로드 허용
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  setLoading(true);
+  try {
+    const res  = await fetch('/api/auction/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '업로드 실패');
+    showToast(data.message || '업로드 완료', 'success');
+    await loadAuctions();
+  } catch (e) {
+    showToast('업로드 오류: ' + e.message, 'error');
+  } finally {
+    setLoading(false);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   나만의 경매물건
+═══════════════════════════════════════════════════════ */
+let myAuctionData     = [];
+let myAuctionFiltered = [];
+let myAuctionSelected = new Set();
+let myAuctionPage     = 1;
+let myAuctionPageSize = 30;
+
+/* 경매 뷰에서 선택한 항목 저장 */
+async function saveToMyAuction() {
+  if (auctionSelected.size === 0) return;
+  const items = auctionData.filter(r => auctionSelected.has(r.id));
+  if (!confirm(`선택한 ${items.length}건을 나만의 경매물건으로 저장하겠습니까?`)) return;
+
+  try {
+    const res  = await fetch('/api/my-auction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '저장 실패');
+    showToast(`${data.count}건 저장 완료`, 'success');
+  } catch (e) {
+    showToast('저장 오류: ' + e.message, 'error');
+  }
+}
+
+/* 로드 */
+async function loadMyAuctions() {
+  try {
+    const res  = await fetch('/api/my-auction');
+    myAuctionData = await res.json();
+    if (!Array.isArray(myAuctionData)) myAuctionData = [];
+  } catch (_) {
+    myAuctionData = [];
+  }
+  myAuctionData.forEach((r, i) => { r._seq = i + 1; });
+  myAuctionSelected.clear();
+  applyMyAuctionFilter();
+}
+
+/* 필터 */
+function applyMyAuctionFilter() {
+  const status  = document.getElementById('maf-status')?.value   || '';
+  const bidFrom = document.getElementById('maf-bid-from')?.value || '';
+  const bidTo   = document.getElementById('maf-bid-to')?.value   || '';
+
+  myAuctionFiltered = myAuctionData.filter(r => {
+    if (status && r.my_status !== status) return false;
+    const d = r.my_bid_date || r.bid_date || '';
+    if (bidFrom && (!d || d < bidFrom)) return false;
+    if (bidTo   && (!d || d > bidTo))   return false;
+    return true;
+  });
+
+  const info = document.getElementById('maf-result-count');
+  if (info) {
+    const isFiltered = myAuctionFiltered.length !== myAuctionData.length;
+    info.textContent = isFiltered
+      ? `${myAuctionFiltered.length.toLocaleString()}건 표시 / 전체 ${myAuctionData.length.toLocaleString()}건` : '';
+  }
+
+  myAuctionPage = 1;
+  renderMyAuctionTable();
+}
+
+function resetMyAuctionFilter() {
+  ['maf-status', 'maf-bid-from', 'maf-bid-to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  applyMyAuctionFilter();
+}
+
+/* 렌더 */
+function renderMyAuctionTable() {
+  const tbody  = document.getElementById('my-auction-tbody');
+  const badge  = document.getElementById('my-auction-badge');
+  const selBtn = document.getElementById('my-auction-delete-sel-btn');
+  const selAll = document.getElementById('my-auction-sel-all');
+  if (!tbody) return;
+
+  const total      = myAuctionFiltered.length;
+  const totalPages = Math.max(1, Math.ceil(total / myAuctionPageSize));
+  myAuctionPage    = Math.min(myAuctionPage, totalPages);
+  const start      = (myAuctionPage - 1) * myAuctionPageSize;
+  const end        = Math.min(start + myAuctionPageSize, total);
+  const pageRows   = myAuctionFiltered.slice(start, end);
+
+  if (badge)  badge.textContent    = myAuctionData.length + '건';
+  if (selBtn) selBtn.style.display = myAuctionSelected.size > 0 ? '' : 'none';
+
+  const pageInfo = document.getElementById('my-auction-page-info');
+  if (pageInfo) pageInfo.textContent = total > 0
+    ? `${start + 1}–${end} / 전체 ${total.toLocaleString()}건` : '0건';
+
+  if (selAll) {
+    const pgSel = pageRows.filter(r => myAuctionSelected.has(r.id)).length;
+    selAll.indeterminate = pgSel > 0 && pgSel < pageRows.length;
+    selAll.checked       = pageRows.length > 0 && pgSel === pageRows.length;
+  }
+
+  if (total === 0) {
+    tbody.innerHTML = '<tr><td colspan="16" class="auction-empty">저장된 데이터가 없습니다.</td></tr>';
+    renderMyAuctionPagination(1);
+    return;
+  }
+
+  tbody.innerHTML = pageRows.map(row => {
+    const sc = row.my_status === '낙찰' ? 'badge-won' : 'badge-active';
+    const savedDate = row.saved_at ? row.saved_at.slice(0, 10) : '-';
+    return `<tr data-id="${row.id}" class="${myAuctionSelected.has(row.id) ? 'row-selected' : ''}">
+      <td class="col-chk"><input type="checkbox" ${myAuctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleMyAuctionRow(${row.id}, this.checked)"></td>
+      <td class="col-seq">${row._seq}</td>
+      <td class="col-case">${esc(row.case_no)}</td>
+      <td class="col-type">${esc(row.item_type)}</td>
+      <td class="col-region">${esc(row.region)}</td>
+      <td class="col-date my-editable" data-id="${row.id}" data-field="my_bid_date" data-val="${row.my_bid_date || ''}">${row.my_bid_date || '-'}</td>
+      <td class="col-status my-editable" data-id="${row.id}" data-field="my_status" data-val="${row.my_status || '진행중'}"><span class="status-badge ${sc}">${esc(row.my_status) || '진행중'}</span></td>
+      <td class="col-price">${fmtAmt(row.appraisal_price)}</td>
+      <td class="col-price my-editable" data-id="${row.id}" data-field="winning_price" data-val="${row.winning_price ?? ''}">${fmtAmt(row.winning_price)}</td>
+      <td class="col-price my-editable" data-id="${row.id}" data-field="min_price" data-val="${row.min_price ?? ''}">${fmtAmt(row.min_price)}</td>
+      <td class="col-price">${fmtAmt(row.official_price)}</td>
+      <td class="col-market my-editable" data-id="${row.id}" data-field="jeonse_market" data-val="${row.jeonse_market ?? ''}">${fmtAmt(row.jeonse_market)}</td>
+      <td class="${profitCellClass(calcProfit(row.jeonse_market, row.min_price))}">${profitCellHtml(calcProfit(row.jeonse_market, row.min_price))}</td>
+      <td class="col-market my-editable" data-id="${row.id}" data-field="sale_market" data-val="${row.sale_market ?? ''}">${fmtAmt(row.sale_market)}</td>
+      <td class="${profitCellClass(calcProfit(row.sale_market, row.min_price))}">${profitCellHtml(calcProfit(row.sale_market, row.min_price))}</td>
+      <td class="col-floor">${row.floor != null ? row.floor + '층' : '-'}</td>
+      <td class="col-area">${row.building_area != null ? row.building_area : '-'}</td>
+      <td class="col-addr" title="${esc(row.address)}">${esc(row.address)}</td>
+      <td class="col-notes my-editable" data-id="${row.id}" data-field="check_notes" data-val="${esc(row.check_notes || '')}" title="${esc(row.check_notes)}">${esc(row.check_notes) || '-'}</td>
+      <td class="col-date">${savedDate}</td>
+      <td class="col-del"><button class="btn-row-del" onclick="deleteOneMyAuction(${row.id})" title="삭제">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  tbody.onclick = e => {
+    const cell = e.target.closest('.my-editable');
+    if (cell && !cell.querySelector('input, select')) startEditMyCell(cell);
+  };
+
+  renderMyAuctionPagination(totalPages);
+}
+
+/* 인라인 편집 */
+function startEditMyCell(cell) {
+  const id    = parseInt(cell.dataset.id, 10);
+  const field = cell.dataset.field;
+  const val   = cell.dataset.val;
+  let input;
+
+  if (field === 'my_status') {
+    input = document.createElement('select');
+    input.className = 'my-cell-input';
+    input.innerHTML = '<option value="진행중">진행중</option><option value="낙찰">낙찰</option>';
+    input.value = val || '진행중';
+  } else if (field === 'my_bid_date') {
+    input = document.createElement('input');
+    input.type = 'date';
+    input.className = 'my-cell-input';
+    input.value = val || '';
+  } else if (field === 'winning_price' || field === 'min_price' || field === 'jeonse_market' || field === 'sale_market') {
+    input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'my-cell-input';
+    input.placeholder = '만원';
+    input.value = val !== '' ? val : '';
+    input.min = '0';
+  } else {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'my-cell-input';
+    input.value = val || '';
+    input.placeholder = '체크사항 입력';
+  }
+
+  cell.innerHTML = '';
+  cell.appendChild(input);
+  input.focus();
+
+  const save = async () => {
+    const newVal = input.value.trim();
+    const body = {};
+    if (field === 'winning_price' || field === 'min_price' || field === 'jeonse_market' || field === 'sale_market') {
+      body[field] = newVal !== '' ? parseFloat(newVal) : null;
+    } else {
+      body[field] = newVal !== '' ? newVal : null;
+    }
+    try {
+      await fetch(`/api/my-auction/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const row = myAuctionData.find(r => r.id === id);
+      if (row) row[field] = body[field];
+    } catch (_) {}
+    renderMyAuctionTable();
+  };
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { renderMyAuctionTable(); }
+  });
+  if (field === 'my_status') input.addEventListener('change', () => input.blur());
+}
+
+/* 페이지네이션 */
+function renderMyAuctionPagination(totalPages) {
+  const el = document.getElementById('my-auction-pagination');
+  if (!el) return;
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const p   = myAuctionPage;
+  const btn = (label, page, disabled, active) =>
+    `<button class="page-btn${active ? ' active' : ''}" ${disabled ? 'disabled' : `onclick="changeMyAuctionPage(${page})"`}>${label}</button>`;
+
+  let html = btn('«', 1, p === 1, false) + btn('‹', p - 1, p === 1, false);
+  const range = 2;
+  const pages = new Set([1, totalPages]);
+  for (let i = Math.max(1, p - range); i <= Math.min(totalPages, p + range); i++) pages.add(i);
+  const sorted = [...pages].sort((a, b) => a - b);
+  let prev = 0;
+  sorted.forEach(pg => {
+    if (prev && pg - prev > 1) html += `<span class="page-ellipsis">…</span>`;
+    html += btn(pg, pg, false, pg === p);
+    prev = pg;
+  });
+  html += btn('›', p + 1, p === totalPages, false) + btn('»', totalPages, p === totalPages, false);
+  el.innerHTML = html;
+}
+
+function changeMyAuctionPage(page) {
+  myAuctionPage = page;
+  renderMyAuctionTable();
+  document.getElementById('my-auction-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function changeMyAuctionPageSize() {
+  myAuctionPageSize = parseInt(document.getElementById('my-auction-page-size').value, 10);
+  myAuctionPage = 1;
+  renderMyAuctionTable();
+}
+
+/* 선택 */
+function toggleMyAuctionRow(id, checked) {
+  if (checked) myAuctionSelected.add(id);
+  else myAuctionSelected.delete(id);
+
+  const tr = document.querySelector(`#my-auction-tbody tr[data-id="${id}"]`);
+  if (tr) tr.classList.toggle('row-selected', checked);
+
+  const selAll = document.getElementById('my-auction-sel-all');
+  const selBtn = document.getElementById('my-auction-delete-sel-btn');
+  const pgSel  = myAuctionFiltered.filter(r => myAuctionSelected.has(r.id)).length;
+  if (selAll) selAll.indeterminate = pgSel > 0 && pgSel < myAuctionFiltered.length;
+  if (selAll) selAll.checked = myAuctionFiltered.length > 0 && pgSel === myAuctionFiltered.length;
+  if (selBtn) selBtn.style.display = myAuctionSelected.size > 0 ? '' : 'none';
+}
+
+function toggleMyAuctionSelAll(checked) {
+  const start    = (myAuctionPage - 1) * myAuctionPageSize;
+  const pageRows = myAuctionFiltered.slice(start, start + myAuctionPageSize);
+  if (checked) pageRows.forEach(r => myAuctionSelected.add(r.id));
+  else         pageRows.forEach(r => myAuctionSelected.delete(r.id));
+
+  document.querySelectorAll('#my-auction-tbody tr[data-id]').forEach(tr => {
+    tr.classList.toggle('row-selected', checked);
+    const chk = tr.querySelector('input[type="checkbox"]');
+    if (chk) chk.checked = checked;
+  });
+
+  const selBtn = document.getElementById('my-auction-delete-sel-btn');
+  if (selBtn) selBtn.style.display = myAuctionSelected.size > 0 ? '' : 'none';
+}
+
+/* 삭제 */
+async function deleteOneMyAuction(id) {
+  if (!confirm('이 항목을 삭제하겠습니까?')) return;
+  try {
+    await fetch(`/api/my-auction/${id}`, { method: 'DELETE' });
+    myAuctionData     = myAuctionData.filter(r => r.id !== id);
+    myAuctionFiltered = myAuctionFiltered.filter(r => r.id !== id);
+    myAuctionSelected.delete(id);
+    myAuctionData.forEach((r, i) => { r._seq = i + 1; });
+    renderMyAuctionTable();
+    showToast('삭제 완료');
+  } catch (e) { showToast('삭제 실패: ' + e.message, 'error'); }
+}
+
+async function deleteSelectedMyAuctions() {
+  if (myAuctionSelected.size === 0) return;
+  if (!confirm(`선택한 ${myAuctionSelected.size}건을 삭제하겠습니까?`)) return;
+  const ids = [...myAuctionSelected];
+  try {
+    await fetch('/api/my-auction/batch', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    myAuctionData     = myAuctionData.filter(r => !myAuctionSelected.has(r.id));
+    myAuctionFiltered = myAuctionFiltered.filter(r => !myAuctionSelected.has(r.id));
+    myAuctionSelected.clear();
+    myAuctionData.forEach((r, i) => { r._seq = i + 1; });
+    renderMyAuctionTable();
+    showToast('삭제 완료');
+  } catch (e) { showToast('삭제 실패: ' + e.message, 'error'); }
+}
+
+/* 엑셀 다운로드 */
+function downloadMyAuctionExcel() {
+  const data = myAuctionFiltered.length !== myAuctionData.length ? myAuctionFiltered : myAuctionData;
+  if (!data.length) { showToast('다운로드할 데이터가 없습니다.', 'error'); return; }
+
+  const rows = data.map(r => ({
+    '순번':           r._seq,
+    '경매사건번호':   r.case_no || '',
+    '물건종류':       r.item_type || '',
+    '지역':           r.region || '',
+    '입찰일':         r.my_bid_date || r.bid_date || '',
+    '상태':           r.my_status || '',
+    '감정가(만원)':   r.appraisal_price ?? '',
+    '낙찰가(만원)':   r.winning_price ?? '',
+    '최저가(만원)':   r.min_price ?? '',
+    '공시가(만원)':   r.official_price ?? '',
+    '전세시세(만원)': r.jeonse_market ?? '',
+    '전세차익(만원)': calcProfit(r.jeonse_market, r.min_price) ?? '',
+    '매매시세(만원)': r.sale_market ?? '',
+    '매매차익(만원)': calcProfit(r.sale_market, r.min_price) ?? '',
+    '층수':           r.floor != null ? r.floor : '',
+    '건물평수':       r.building_area ?? '',
+    '주소':           r.address || '',
+    '체크사항':     r.check_notes || '',
+    '저장일':       r.saved_at ? r.saved_at.slice(0, 10) : '',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '나만의경매물건');
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const isFiltered = myAuctionFiltered.length !== myAuctionData.length;
+  XLSX.writeFile(wb, `나만의경매물건_${isFiltered ? '필터' : '전체'}_${today}.xlsx`);
+  showToast(`${data.length.toLocaleString()}건 다운로드 완료`);
+}
