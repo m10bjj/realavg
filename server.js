@@ -74,23 +74,31 @@ app.get('/login.css', (req, res) =>
 
 app.post('/auth/login', async (req, res) => {
   const { id, password } = req.body;
-  const cfg = await auth.getAuth();
-  if (id === cfg.id && password === cfg.password) {
-    setAuthCookie(res, id);
-    return res.json({ success: true });
+  try {
+    const cfg = await auth.getAuth();
+    if (id === cfg.id && password === cfg.password) {
+      setAuthCookie(res, id);
+      return res.json({ success: true });
+    }
+    res.json({ success: false, error: '아이디 또는 비밀번호가 올바르지 않습니다.' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
   }
-  res.json({ success: false, error: '아이디 또는 비밀번호가 올바르지 않습니다.' });
 });
 
 app.post('/auth/recover', async (req, res) => {
   const { name, phone_last4, birthdate, pin } = req.body;
-  const cfg = await auth.getAuth();
-  const r   = cfg.recovery;
-  if (name === r.name && phone_last4 === r.phone_last4 &&
-      birthdate === r.birthdate && pin === r.pin) {
-    return res.json({ success: true, password: cfg.password });
+  try {
+    const cfg = await auth.getAuth();
+    const r   = cfg.recovery;
+    if (name === r.name && phone_last4 === r.phone_last4 &&
+        birthdate === r.birthdate && pin === r.pin) {
+      return res.json({ success: true, password: cfg.password });
+    }
+    res.json({ success: false, error: '입력하신 정보가 일치하지 않습니다.' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
   }
-  res.json({ success: false, error: '입력하신 정보가 일치하지 않습니다.' });
 });
 
 /* ──────────────────────────────────────────
@@ -114,37 +122,45 @@ app.get('/auth/me', (req, res) => {
 
 app.post('/auth/change', async (req, res) => {
   const { currentPassword, newId, newPassword } = req.body;
-  const cfg = await auth.getAuth();
-  if (currentPassword !== cfg.password) {
-    return res.json({ success: false, error: '현재 비밀번호가 올바르지 않습니다.' });
+  try {
+    const cfg = await auth.getAuth();
+    if (currentPassword !== cfg.password) {
+      return res.json({ success: false, error: '현재 비밀번호가 올바르지 않습니다.' });
+    }
+    if (!newId || !newPassword) {
+      return res.json({ success: false, error: '새 아이디와 비밀번호를 입력해주세요.' });
+    }
+    cfg.id       = newId.trim();
+    cfg.password = newPassword;
+    await auth.saveAuth(cfg);
+    setAuthCookie(res, cfg.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
   }
-  if (!newId || !newPassword) {
-    return res.json({ success: false, error: '새 아이디와 비밀번호를 입력해주세요.' });
-  }
-  cfg.id       = newId.trim();
-  cfg.password = newPassword;
-  await auth.saveAuth(cfg);
-  setAuthCookie(res, cfg.id);
-  res.json({ success: true });
 });
 
 app.post('/auth/change-recovery', async (req, res) => {
   const { currentPassword, name, phone_last4, birthdate, pin } = req.body;
-  const cfg = await auth.getAuth();
-  if (currentPassword !== cfg.password) {
-    return res.json({ success: false, error: '현재 비밀번호가 올바르지 않습니다.' });
+  try {
+    const cfg = await auth.getAuth();
+    if (currentPassword !== cfg.password) {
+      return res.json({ success: false, error: '현재 비밀번호가 올바르지 않습니다.' });
+    }
+    if (!name || !phone_last4 || !birthdate || !pin) {
+      return res.json({ success: false, error: '모든 항목을 입력해주세요.' });
+    }
+    cfg.recovery = {
+      name:        name.trim(),
+      phone_last4: phone_last4.trim(),
+      birthdate:   birthdate.trim(),
+      pin:         pin.trim(),
+    };
+    await auth.saveAuth(cfg);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
   }
-  if (!name || !phone_last4 || !birthdate || !pin) {
-    return res.json({ success: false, error: '모든 항목을 입력해주세요.' });
-  }
-  cfg.recovery = {
-    name:        name.trim(),
-    phone_last4: phone_last4.trim(),
-    birthdate:   birthdate.trim(),
-    pin:         pin.trim(),
-  };
-  await auth.saveAuth(cfg);
-  res.json({ success: true });
 });
 
 /* ──────────────────────────────────────────

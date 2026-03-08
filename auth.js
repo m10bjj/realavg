@@ -19,8 +19,13 @@ async function getAuth() {
     .eq('id', 1)
     .maybeSingle();
 
-  if (error || !data) {
-    /* 최초 실행 시 기본값으로 초기화 */
+  if (error) {
+    /* DB 읽기 오류 시 기존 데이터를 덮어쓰지 않고 예외 throw */
+    throw new Error('인증 정보를 읽는 중 오류가 발생했습니다: ' + error.message);
+  }
+
+  if (!data) {
+    /* 행이 없을 때만(최초 실행) 기본값으로 초기화 */
     await supabase.from('auth_config').upsert({
       id:             1,
       user_id:        DEFAULT_AUTH.id,
