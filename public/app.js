@@ -1146,16 +1146,20 @@ function switchView(view) {
   const realestateView    = document.getElementById('realestate-view');
   const auctionView       = document.getElementById('auction-view');
   const myAuctionView     = document.getElementById('my-auction-view');
+  const naverView         = document.getElementById('naver-view');
   const historyBtn        = document.getElementById('history-btn');
   const auctionFilterBody = document.getElementById('sidebar-auction-filter-body');
   const myAuctionBody     = document.getElementById('sidebar-my-auction-body');
+  const naverBody         = document.getElementById('sidebar-naver-body');
 
-  searchBody.style.display        = view === 'realestate' ? '' : 'none';
-  if (auctionFilterBody) auctionFilterBody.style.display = view === 'auction' ? '' : 'none';
+  searchBody.style.display     = view === 'realestate' ? '' : 'none';
+  if (auctionFilterBody) auctionFilterBody.style.display = view === 'auction'    ? '' : 'none';
   if (myAuctionBody)     myAuctionBody.style.display     = view === 'my-auction' ? '' : 'none';
-  realestateView.style.display    = view === 'realestate' ? '' : 'none';
-  auctionView.style.display       = view === 'auction'    ? 'flex' : 'none';
+  if (naverBody)         naverBody.style.display         = view === 'naver'      ? '' : 'none';
+  realestateView.style.display = view === 'realestate' ? ''     : 'none';
+  auctionView.style.display    = view === 'auction'    ? 'flex' : 'none';
   if (myAuctionView) myAuctionView.style.display = view === 'my-auction' ? 'flex' : 'none';
+  if (naverView)     naverView.style.display     = view === 'naver'      ? 'flex' : 'none';
   if (historyBtn) historyBtn.style.display = view === 'realestate' ? '' : 'none';
 
   document.querySelectorAll('.sidebar-nav-item').forEach(el => {
@@ -2039,4 +2043,95 @@ function downloadMyAuctionExcel() {
   const isFiltered = myAuctionFiltered.length !== myAuctionData.length;
   XLSX.writeFile(wb, `나만의경매물건_${isFiltered ? '필터' : '전체'}_${today}.xlsx`);
   showToast(`${data.length.toLocaleString()}건 다운로드 완료`);
+}
+
+/* ═══════════════════════════════════════════════════════
+   네이버부동산 호가 분석
+═══════════════════════════════════════════════════════ */
+
+function parseNaverText(text) {
+  const lines = text.split('\n');
+  const listings = [];
+  const BLOCK = 10;
+
+  for (let i = 0; i + BLOCK <= lines.length; i += BLOCK) {
+    const b = lines.slice(i, i + BLOCK);
+
+    const houseType = b[0].trim(); // 주거종류
+    const price     = b[1].trim(); // 가격
+    const detail    = b[2].trim(); // 주거종류 · 공급XX㎡/전용YY㎡ · A/B층 · 향
+    // b[3] 빈줄
+    const highlight = b[4].trim(); // 자랑거리
+    // b[5] 빈줄
+    const ageLine   = b[6].trim(); // XX년된 건물
+    // b[7] 정보제공처 (표시 생략)
+    const agent     = b[8].trim(); // 공인중개사명
+    // b[9] 확인날짜 (표시 생략)
+
+    // detail 파싱: "다세대주택 · 공급 53.78㎡/전용 43.54㎡ · 3/4층 · 남향"
+    let supplyArea = '', exclArea = '', floorCur = '', floorTotal = '', direction = '';
+    detail.split('·').map(s => s.trim()).forEach(part => {
+      const areaM = part.match(/공급\s*([\d.]+)㎡\/전용\s*([\d.]+)㎡/);
+      if (areaM) { supplyArea = areaM[1] + '㎡'; exclArea = areaM[2] + '㎡'; }
+
+      const floorM = part.match(/(\d+)\/(\d+)층/);
+      if (floorM) { floorCur = floorM[1]; floorTotal = floorM[2]; }
+
+      const dirM = part.match(/(남동|남서|북동|북서|동|서|남|북)향/);
+      if (dirM) direction = dirM[0];
+    });
+
+    const area = (supplyArea && exclArea)
+      ? `${supplyArea} / ${exclArea}`
+      : (supplyArea || exclArea || '-');
+
+    // 년식: "13년된 건물" → "13년"
+    const ageM = ageLine.match(/(\d+)년/);
+    const buildAge = ageM ? ageM[1] + '년' : ageLine;
+
+    listings.push({ houseType, price, area, floorCur, floorTotal, direction, buildAge, agent, highlight });
+  }
+
+  return listings;
+}
+
+function analyzeNaver() {
+  const text = (document.getElementById('naver-paste-area').value || '').trim();
+  if (!text) { showToast('텍스트를 붙여넣으세요.', 'error'); return; }
+
+  const listings = parseNaverText(text);
+  if (!listings.length) {
+    showToast('매물을 파싱할 수 없습니다. 10줄 형식을 확인하세요.', 'error');
+    return;
+  }
+
+  const gu   = (document.getElementById('naver-gu').value || '').trim();
+  const dong = (document.getElementById('naver-dong').value || '').trim();
+  const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const loc   = [gu, dong].filter(Boolean).join(' ');
+  document.getElementById('naver-result-title').textContent =
+    `${today} ${loc} 빌라 호가 분석 (${listings.length}건)`;
+
+  const tbody = document.getElementById('naver-tbody');
+  tbody.innerHTML = listings.map((r, i) => `
+    <tr>
+      <td class="col-seq">${i + 1}</td>
+      <td class="col-type">${esc(r.houseType)}</td>
+      <td class="col-price" style="font-weight:600">${esc(r.price)}</td>
+      <td style="font-size:12px">${esc(r.area)}</td>
+      <td class="col-floor">${esc(r.floorCur)}</td>
+      <td class="col-floor">${esc(r.floorTotal)}</td>
+      <td style="width:52px;text-align:center">${esc(r.direction)}</td>
+      <td style="width:60px;text-align:center">${esc(r.buildAge)}</td>
+      <td style="width:140px;font-size:12px">${esc(r.agent)}</td>
+      <td class="col-notes">${esc(r.highlight)}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('naver-result-section').style.display = '';
+}
+
+function clearNaverInput() {
+  document.getElementById('naver-paste-area').value = '';
+  document.getElementById('naver-result-section').style.display = 'none';
 }
