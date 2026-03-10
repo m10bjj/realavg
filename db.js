@@ -1,6 +1,9 @@
 const supabase = require('./lib/supabase');
 
+const HISTORY_LIMIT = 10;
+
 async function saveSearch({ regionCode, regionName, dealYmd, tradeType, resultCount }) {
+  /* 새 이력 삽입 */
   const { data, error } = await supabase
     .from('searches')
     .insert({
@@ -13,6 +16,17 @@ async function saveSearch({ regionCode, regionName, dealYmd, tradeType, resultCo
     .select('id')
     .single();
   if (error) throw error;
+
+  /* 10개 초과 시 오래된 이력 삭제 */
+  const { data: all } = await supabase
+    .from('searches')
+    .select('id')
+    .order('created_at', { ascending: true });
+  if (all && all.length > HISTORY_LIMIT) {
+    const toDelete = all.slice(0, all.length - HISTORY_LIMIT).map(r => r.id);
+    await supabase.from('searches').delete().in('id', toDelete);
+  }
+
   return data.id;
 }
 
