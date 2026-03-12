@@ -1048,7 +1048,8 @@
             <div class="profit-row profit-row--2">
               <div class="profit-field">
                 <label>낙찰가 (만원)</label>
-                <input type="number" id="pf-winning" class="profit-input" placeholder="0" oninput="onProfitWinningChange()">
+                <input type="text" id="pf-winning" class="profit-input" placeholder="0"
+                  onfocus="onWinningFocus()" oninput="onProfitWinningChange()" onblur="onWinningBlur()">
               </div>
               <div class="profit-field">
                 <label>감정가대비 (%)</label>

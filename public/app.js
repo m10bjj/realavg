@@ -2630,7 +2630,7 @@ function autoCalcTransferTax() {
   const g = id => parseFloat(document.getElementById(id)?.value || '0') || 0;
   const raw = id => parseFloat(document.getElementById(id)?.dataset.raw || '0') || 0;
   const salePrice  = g('pf-sale-price');
-  const winning    = g('pf-winning');
+  const winning    = raw('pf-winning');
   const acqTax     = raw('pf-acq-tax');
   const interior   = raw('pf-interior');
   const legalFee   = raw('pf-legal-fee');
@@ -2693,7 +2693,8 @@ function fillProfitItemInfo(item) {
 /* ── 저장된 값 로드 ── */
 function loadProfitFields(saved) {
   const map = {
-    'pf-winning':           'winning_price',
+    // pf-winning은 별도 처리 (원 단위 표시)
+    // 'pf-winning': 'winning_price',
     'pf-loan-ratio':        'loan_ratio',
     'pf-acq-tax-rate':      'acq_tax_rate',
     'pf-acquired-deposit':  'acquired_deposit',
@@ -2723,8 +2724,14 @@ function loadProfitFields(saved) {
     const idx = scenarios.findIndex(s => s.label === saved.transfer_tax_scenario);
     if (idx >= 0) document.getElementById('pf-transfer-scenario').value = idx;
   }
+  // 낙찰가 원 단위 표시
+  const winEl2 = document.getElementById('pf-winning');
+  if (winEl2 && saved.winning_price != null) {
+    winEl2.dataset.raw = saved.winning_price;
+    winEl2.value = fmtWon(saved.winning_price);
+  }
   // 감정가대비% 재계산
-  const winning   = parseFloat(document.getElementById('pf-winning').value) || 0;
+  const winning   = saved.winning_price || 0;
   const appraisal = profitItem?.appraisal_price || 0;
   if (appraisal > 0 && winning > 0)
     document.getElementById('pf-appraisal-ratio').value = (winning / appraisal * 100).toFixed(1);
@@ -2751,7 +2758,9 @@ function autoFillProfitFromItem() {
   if (!profitItem) return;
   const minPrice  = profitItem.min_price      || 0;
   const appraisal = profitItem.appraisal_price || 0;
-  document.getElementById('pf-winning').value = minPrice || '';
+  const winEl = document.getElementById('pf-winning');
+  winEl.dataset.raw = minPrice || '';
+  winEl.value = minPrice ? fmtWon(minPrice) : '';
   if (appraisal > 0 && minPrice > 0)
     document.getElementById('pf-appraisal-ratio').value = (minPrice / appraisal * 100).toFixed(1);
   // 취득세 시나리오: 물건 유형 기준 자동 선택
@@ -2769,9 +2778,23 @@ function autoFillProfitFromItem() {
   document.getElementById('pf-acq-tax-rate').value = (scenarios[acqIdx] || scenarios[0])?.rate || 1.1;
 }
 
+/* ── 낙찰가 포커스/블러 ── */
+function onWinningFocus() {
+  const el = document.getElementById('pf-winning');
+  if (el.dataset.raw) el.value = el.dataset.raw;
+}
+function onWinningBlur() {
+  const el  = document.getElementById('pf-winning');
+  const num = parseFloat(el.value) || 0;
+  el.dataset.raw = num || '';
+  el.value = num ? fmtWon(num) : '';
+}
+
 /* ── 낙찰가 ↔ 감정가대비% 연동 ── */
 function onProfitWinningChange() {
-  const winning   = parseFloat(document.getElementById('pf-winning').value) || 0;
+  const el      = document.getElementById('pf-winning');
+  const winning = parseFloat(el.value) || 0;
+  el.dataset.raw = winning || '';
   const appraisal = profitItem?.appraisal_price || 0;
   if (appraisal > 0)
     document.getElementById('pf-appraisal-ratio').value = (winning / appraisal * 100).toFixed(1);
@@ -2780,8 +2803,12 @@ function onProfitWinningChange() {
 function onProfitRatioChange() {
   const ratio     = parseFloat(document.getElementById('pf-appraisal-ratio').value) || 0;
   const appraisal = profitItem?.appraisal_price || 0;
-  if (appraisal > 0)
-    document.getElementById('pf-winning').value = Math.round(appraisal * ratio / 100);
+  if (appraisal > 0) {
+    const winning = Math.round(appraisal * ratio / 100);
+    const el = document.getElementById('pf-winning');
+    el.dataset.raw = winning;
+    el.value = fmtWon(winning);
+  }
   calcProfitAll();
 }
 
@@ -2791,7 +2818,8 @@ function calcProfitAll() {
   const g   = id => parseFloat(document.getElementById(id)?.value || '0') || 0;
   const raw = id => parseFloat(document.getElementById(id)?.dataset.raw || '0') || 0;
 
-  const winning    = g('pf-winning');
+  const winEl  = document.getElementById('pf-winning');
+  const winning = parseFloat(winEl?.dataset.raw || winEl?.value || '0') || 0;
   const loanRatio  = g('pf-loan-ratio');
   const taxRate    = g('pf-acq-tax-rate');
   const acqDep     = g('pf-acquired-deposit');
@@ -2917,7 +2945,7 @@ async function saveProfitAnalysis() {
     return (table[profitType] || [])[parseInt(sel.value, 10)]?.label || null;
   };
 
-  const winning      = g('pf-winning')    || 0;
+  const winning      = parseFloat(document.getElementById('pf-winning')?.dataset.raw || '0') || 0;
   const loan         = g('pf-loan')       || 0;
   const acqTax       = g('pf-acq-tax')    || 0;
   const deposit      = g('pf-deposit')    || 0;
