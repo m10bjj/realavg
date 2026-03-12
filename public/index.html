@@ -680,6 +680,7 @@
               <tr>
                 <th class="col-chk"><input type="checkbox" id="my-auction-sel-all" onchange="toggleMyAuctionSelAll(this.checked)"></th>
                 <th class="col-seq">순번</th>
+                <th class="col-action">수익률<br>분석</th>
                 <th class="col-case">경매사건번호</th>
                 <th class="col-type">물건종류</th>
                 <th class="col-region">지역</th>
@@ -698,7 +699,6 @@
                 <th class="col-addr">주소</th>
                 <th class="col-notes editable-col">체크사항<br><small>수정가능</small></th>
                 <th class="col-date">저장일</th>
-                <th class="col-action">수익률<br>분석</th>
                 <th class="col-del"></th>
               </tr>
             </thead>
@@ -1037,120 +1037,228 @@
           </div>
         </div>
 
-        <!-- 낙찰가 설정 -->
-        <div class="profit-section">
-          <div class="profit-section-title">낙찰가 설정</div>
-          <div class="profit-row profit-row--3">
-            <div class="profit-field">
-              <label>낙찰가 (만원)</label>
-              <input type="number" id="pf-winning" class="profit-input" placeholder="0" oninput="onProfitWinningChange()">
-            </div>
-            <div class="profit-field">
-              <label>감정가대비 (%)</label>
-              <input type="number" id="pf-appraisal-ratio" class="profit-input" placeholder="0.0" step="0.1" oninput="onProfitRatioChange()">
-            </div>
-            <div class="profit-field">
-              <label>최저가대비 <small style="font-weight:400">(참고)</small></label>
-              <span id="pf-min-ratio" class="profit-ref-val">-</span>
-            </div>
-          </div>
-        </div>
+        <!-- 2컬럼 메인 영역 -->
+        <div class="profit-main-grid">
 
-        <!-- 취득 비용 -->
-        <div class="profit-section">
-          <div class="profit-section-title">취득 비용</div>
-          <div class="profit-grid">
-            <div class="profit-field">
-              <label>취득세율 (%)<span class="profit-auto-hint" id="pf-acq-tax-hint"></span></label>
-              <input type="number" id="pf-acq-tax-rate" class="profit-input" step="0.1" oninput="calcProfitAll()">
-            </div>
-            <div class="profit-field">
-              <label>취득세 (만원)</label>
-              <input type="number" id="pf-acq-tax" class="profit-input profit-auto" readonly>
-            </div>
-            <div class="profit-field">
-              <label>입찰보증금 (만원) <span class="profit-formula">최저가×10%</span></label>
-              <input type="number" id="pf-deposit" class="profit-input profit-auto" readonly>
-            </div>
-            <div class="profit-field">
-              <label>납부잔금 (만원) <span class="profit-formula">낙찰가-보증금</span></label>
-              <input type="number" id="pf-remaining" class="profit-input profit-auto" readonly>
-            </div>
-            <div class="profit-field">
-              <label>법무사비 (만원) <span class="profit-formula">낙찰가×0.5%</span></label>
-              <input type="number" id="pf-legal-fee" class="profit-input profit-auto" readonly>
-            </div>
-            <div class="profit-field">
-              <label>명도비 (만원) <span class="profit-formula">㎡×1.5만</span></label>
-              <input type="number" id="pf-eviction" class="profit-input profit-auto" readonly>
-            </div>
-            <div class="profit-field">
-              <label>인테리어비 (만원) <span class="profit-formula">평×20만</span></label>
-              <input type="number" id="pf-interior" class="profit-input profit-auto" readonly>
-            </div>
-            <div class="profit-field">
-              <label>기타비용 (만원)</label>
-              <input type="number" id="pf-other-cost" class="profit-input" placeholder="0" oninput="calcProfitAll()">
-            </div>
-          </div>
-          <div class="profit-subtotal">
-            <span>취득 총비용 (낙찰가+세금+제비용)</span>
-            <span id="pf-total-cost" class="profit-subtotal-val">-</span>
-          </div>
-        </div>
+          <!-- ▌왼쪽: 초기투자비용 -->
+          <div class="profit-section profit-section--invest">
+            <div class="profit-section-title">💰 초기투자비용</div>
 
-        <!-- 대출 / 이자 -->
-        <div class="profit-section">
-          <div class="profit-section-title">대출 / 이자</div>
-          <div class="profit-row profit-row--5">
-            <div class="profit-field">
-              <label>대출금 (만원)</label>
-              <input type="number" id="pf-loan" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+            <!-- 낙찰가 / 감정가대비 -->
+            <div class="profit-row profit-row--2">
+              <div class="profit-field">
+                <label>낙찰가 (만원)</label>
+                <input type="number" id="pf-winning" class="profit-input" placeholder="0" oninput="onProfitWinningChange()">
+              </div>
+              <div class="profit-field">
+                <label>감정가대비 (%)</label>
+                <input type="number" id="pf-appraisal-ratio" class="profit-input" placeholder="0.0" step="0.1" oninput="onProfitRatioChange()">
+              </div>
             </div>
-            <div class="profit-field">
-              <label>연이율 (%)</label>
-              <input type="number" id="pf-loan-rate" class="profit-input" placeholder="3.5" step="0.1" oninput="calcProfitAll()">
-            </div>
-            <div class="profit-field">
-              <label>보유기간 (개월)</label>
-              <input type="number" id="pf-holding" class="profit-input" placeholder="12" oninput="calcProfitAll()">
-            </div>
-            <div class="profit-field">
-              <label>월이자 (만원)</label>
-              <input type="number" id="pf-monthly-int" class="profit-input profit-auto" readonly>
-            </div>
-            <div class="profit-field">
-              <label>보유이자 (만원)</label>
-              <input type="number" id="pf-total-int" class="profit-input profit-auto" readonly>
-            </div>
-          </div>
-        </div>
 
-        <!-- 매도 -->
-        <div class="profit-section">
-          <div class="profit-section-title">매도</div>
-          <div class="profit-row profit-row--3">
-            <div class="profit-field">
-              <label>매도금액 (만원)</label>
-              <input type="number" id="pf-sale-price" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+            <!-- 은행대출 / 대출비율 -->
+            <div class="profit-row profit-row--2">
+              <div class="profit-field">
+                <label>은행대출 <span class="profit-formula">낙찰가×비율</span></label>
+                <input type="text" id="pf-loan" class="profit-input profit-auto" readonly>
+              </div>
+              <div class="profit-field">
+                <label>대출비율 (%)</label>
+                <input type="number" id="pf-loan-ratio" class="profit-input" placeholder="0" step="1" oninput="calcProfitAll()">
+              </div>
             </div>
-            <div class="profit-field">
-              <label>중개수수료 (만원) <span class="profit-formula">매도금액×0.4%</span></label>
-              <input type="number" id="pf-brokerage" class="profit-input profit-auto" readonly>
-            </div>
-            <div class="profit-field">
-              <label>양도세 (만원) <span class="profit-auto-hint" id="pf-transfer-hint"></span></label>
-              <input type="number" id="pf-transfer-tax" class="profit-input" placeholder="0" oninput="calcProfitAll()">
-            </div>
-          </div>
-        </div>
 
-        <!-- 결과 -->
+            <div class="profit-divider"></div>
+
+            <!-- 입찰보증금 / 납부잔금 -->
+            <div class="profit-row profit-row--2">
+              <div class="profit-field">
+                <label>입찰보증금 <span class="profit-formula">최저가×10%</span></label>
+                <input type="text" id="pf-deposit" class="profit-input profit-auto" readonly>
+              </div>
+              <div class="profit-field">
+                <label>납부잔금 <span class="profit-formula">낙찰가-대출-보증금</span></label>
+                <input type="text" id="pf-remaining" class="profit-input profit-auto" readonly>
+              </div>
+            </div>
+
+            <div class="profit-divider"></div>
+
+            <!-- 취득세 시나리오 / 세율 / 취득세 -->
+            <div class="profit-row profit-row--3">
+              <div class="profit-field">
+                <label>취득세 시나리오</label>
+                <select id="pf-acq-scenario" class="profit-input profit-select" onchange="onAcqScenarioChange()"></select>
+              </div>
+              <div class="profit-field">
+                <label>취득세율 (%)</label>
+                <input type="number" id="pf-acq-tax-rate" class="profit-input" step="0.1" oninput="calcProfitAll()">
+              </div>
+              <div class="profit-field">
+                <label>취득세 <span class="profit-formula">자동계산</span></label>
+                <input type="text" id="pf-acq-tax" class="profit-input profit-auto" readonly>
+              </div>
+            </div>
+
+            <!-- 인수보증금 / 미납관리비 -->
+            <div class="profit-row profit-row--2">
+              <div class="profit-field">
+                <label>인수보증금 (만원)</label>
+                <input type="number" id="pf-acquired-deposit" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+              </div>
+              <div class="profit-field">
+                <label>미납관리비 (만원)</label>
+                <input type="number" id="pf-unpaid-maintenance" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+              </div>
+            </div>
+
+            <!-- 명도비 / 인테리어 / 법무사비 -->
+            <div class="profit-row profit-row--3">
+              <div class="profit-field">
+                <label>명도비 <span class="profit-formula">평×5만</span></label>
+                <input type="text" id="pf-eviction" class="profit-input profit-auto" readonly>
+              </div>
+              <div class="profit-field">
+                <label>인테리어 <span class="profit-formula">평×20만</span></label>
+                <input type="text" id="pf-interior" class="profit-input profit-auto" readonly>
+              </div>
+              <div class="profit-field">
+                <label>법무사비 <span class="profit-formula">낙찰가×0.5%</span></label>
+                <input type="text" id="pf-legal-fee" class="profit-input profit-auto" readonly>
+              </div>
+            </div>
+
+            <div class="profit-divider"></div>
+
+            <!-- 소계 -->
+            <div class="profit-subtotal-rows">
+              <div class="profit-subtotal-row">
+                <span>비용소계 (a) <small>취득세+인수보증금+명도비+인테리어+법무사비+미납관리비</small></span>
+                <span id="pf-cost-subtotal" class="profit-subtotal-val">-</span>
+              </div>
+              <div class="profit-subtotal-row">
+                <span>자기자본 <small>낙찰가-대출+비용소계(a)</small></span>
+                <span id="pf-own-capital" class="profit-subtotal-val">-</span>
+              </div>
+              <div class="profit-subtotal-row profit-subtotal-row--total">
+                <span>총 투자금액 <small>낙찰가+비용소계(a)</small></span>
+                <span id="pf-total-invest" class="profit-subtotal-val">-</span>
+              </div>
+            </div>
+          </div><!-- profit-section--invest -->
+
+          <!-- ▌오른쪽: 수입 + 지출 -->
+          <div class="profit-right-col">
+
+            <!-- 수입 -->
+            <div class="profit-section profit-section--income">
+              <div class="profit-section-title">📈 수입</div>
+
+              <div class="profit-row profit-row--2">
+                <div class="profit-field">
+                  <label>전/월세 보증금 (만원)</label>
+                  <input type="number" id="pf-jeonse-deposit" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+                </div>
+                <div class="profit-field">
+                  <label>월세 (만원) × 개월</label>
+                  <div class="profit-inline">
+                    <input type="number" id="pf-monthly-rent" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+                    <span class="profit-inline-sep">×</span>
+                    <input type="number" id="pf-rent-months" class="profit-input profit-input--sm" placeholder="0" oninput="calcProfitAll()">
+                  </div>
+                </div>
+              </div>
+
+              <div class="profit-subtotal-rows">
+                <div class="profit-subtotal-row">
+                  <span>수입 소계 <small>보증금+월세×개월</small></span>
+                  <span id="pf-income-subtotal" class="profit-subtotal-val">-</span>
+                </div>
+              </div>
+
+              <div class="profit-divider"></div>
+
+              <div class="profit-field">
+                <label>매도금액 (만원)</label>
+                <input type="number" id="pf-sale-price" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+              </div>
+            </div>
+
+            <!-- 지출 -->
+            <div class="profit-section profit-section--expense">
+              <div class="profit-section-title">💸 지출</div>
+
+              <!-- 대출이자 -->
+              <div class="profit-row profit-row--4">
+                <div class="profit-field">
+                  <label>연이율 (%)</label>
+                  <input type="number" id="pf-loan-rate" class="profit-input" placeholder="3.5" step="0.1" oninput="calcProfitAll()">
+                </div>
+                <div class="profit-field">
+                  <label>보유기간 (개월)</label>
+                  <input type="number" id="pf-holding" class="profit-input" placeholder="12" oninput="calcProfitAll()">
+                </div>
+                <div class="profit-field">
+                  <label>월이자 <span class="profit-formula">자동계산</span></label>
+                  <input type="text" id="pf-monthly-int" class="profit-input profit-auto" readonly>
+                </div>
+                <div class="profit-field">
+                  <label>총이자 <span class="profit-formula">자동계산</span></label>
+                  <input type="text" id="pf-total-int" class="profit-input profit-auto" readonly>
+                </div>
+              </div>
+
+              <div class="profit-divider"></div>
+
+              <!-- 양도세 -->
+              <div class="profit-row profit-row--3">
+                <div class="profit-field">
+                  <label>양도세 시나리오</label>
+                  <select id="pf-transfer-scenario" class="profit-input profit-select" onchange="onTransferScenarioChange()"></select>
+                </div>
+                <div class="profit-field">
+                  <label>양도세율 (%)</label>
+                  <input type="number" id="pf-transfer-tax-rate" class="profit-input" step="0.1" placeholder="0" oninput="onTransferRateChange()">
+                </div>
+                <div class="profit-field">
+                  <label>양도세 (만원)</label>
+                  <input type="number" id="pf-transfer-tax" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+                </div>
+              </div>
+
+              <!-- 중개수수료 -->
+              <div class="profit-row profit-row--2">
+                <div class="profit-field">
+                  <label>중개수수료 <span class="profit-formula">매도금액×0.4%</span></label>
+                  <input type="text" id="pf-brokerage" class="profit-input profit-auto" readonly>
+                </div>
+                <div></div>
+              </div>
+
+              <div class="profit-divider"></div>
+
+              <div class="profit-subtotal-rows">
+                <div class="profit-subtotal-row profit-subtotal-row--total">
+                  <span>지출 소계 (b) <small>총이자+양도세+중개수수료</small></span>
+                  <span id="pf-expense-subtotal" class="profit-subtotal-val">-</span>
+                </div>
+              </div>
+            </div><!-- profit-section--expense -->
+
+          </div><!-- profit-right-col -->
+        </div><!-- profit-main-grid -->
+
+        <!-- 결과 배너 -->
         <div class="profit-result-section">
           <div class="profit-result-row">
             <div class="profit-result-item">
-              <span class="profit-result-label">총투자금 <small style="font-weight:400;font-size:11px">(자기자본)</small></span>
-              <span class="profit-result-val" id="pf-total-invest">-</span>
+              <span class="profit-result-label">총비용 (a+b)</span>
+              <span class="profit-result-val" id="pf-total-cost">-</span>
+            </div>
+            <div class="profit-result-divider"></div>
+            <div class="profit-result-item">
+              <span class="profit-result-label">자기자본</span>
+              <span class="profit-result-val" id="pf-own-capital-result">-</span>
             </div>
             <div class="profit-result-divider"></div>
             <div class="profit-result-item">

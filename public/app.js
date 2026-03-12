@@ -1288,6 +1288,12 @@ function resetAuctionFilter() {
 }
 
 /* 금액 표시: 억/만 포맷 (경매용) */
+function fmtWon(manWon) {
+  if (manWon == null || isNaN(manWon)) return '-';
+  const won = Math.round(manWon) * 10000;
+  return won.toLocaleString() + '원';
+}
+
 function fmtAmt(val) {
   if (val == null || val === '') return '-';
   const n = parseInt(val, 10);
@@ -1818,6 +1824,7 @@ function renderMyAuctionTable() {
     return `<tr data-id="${row.id}" class="${myAuctionSelected.has(row.id) ? 'row-selected' : ''}">
       <td class="col-chk"><input type="checkbox" ${myAuctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleMyAuctionRow(${row.id}, this.checked)"></td>
       <td class="col-seq">${row._seq}</td>
+      <td class="col-action"><button class="btn-profit-sm" onclick="openProfitModal(${row.id})" title="수익률 분석">📊</button></td>
       <td class="col-case">${esc(row.case_no)}</td>
       <td class="col-type">${esc(row.item_type)}</td>
       <td class="col-region">${esc(row.region)}</td>
@@ -1836,7 +1843,6 @@ function renderMyAuctionTable() {
       <td class="col-addr" title="${esc(row.address)}">${esc(row.address)}</td>
       <td class="col-notes my-editable" data-id="${row.id}" data-field="check_notes" data-val="${esc(row.check_notes || '')}" title="${esc(row.check_notes)}">${esc(row.check_notes) || '-'}</td>
       <td class="col-date">${savedDate}</td>
-      <td class="col-action"><button class="btn-profit-sm" onclick="openProfitModal(${row.id})" title="수익률 분석">📊</button></td>
       <td class="col-del"><button class="btn-row-del" onclick="deleteOneMyAuction(${row.id})" title="삭제">✕</button></td>
     </tr>`;
   }).join('');
@@ -2516,139 +2522,167 @@ function renderNaverHistory() { renderNaverBoard(); }
    수익률 분석
 ═══════════════════════════════════════════════════════ */
 
-let profitItem    = null;
-let profitType    = '개인';
-let profitSaved   = {};  // { '개인': {...}, '개인매매사업자': {...}, '법인사업자': {...} }
+let profitItem  = null;
+let profitType  = '개인';
+let profitSaved = {};
 
-/* 현재 주택수 저장/로드 */
-function saveHousingCount(val) {
-  localStorage.setItem('housingCount', val);
-  if (document.getElementById('profit-modal')?.style.display !== 'none' && profitItem) {
-    const info = getAcquisitionTaxInfo(profitType);
-    const rateEl = document.getElementById('pf-acq-tax-rate');
-    if (rateEl && !rateEl.dataset.manual) rateEl.value = info.rate;
-    document.getElementById('pf-acq-tax-hint').textContent = info.hint;
-    calcProfitAll();
-  }
+/* ── 세율 시나리오 테이블 ── */
+const ACQ_TAX_SCENARIOS = {
+  '개인': [
+    { label: '무주택 → 1주택 (1.1%)',  rate: 1.1 },
+    { label: '1주택 → 2주택 (1.1%)',   rate: 1.1 },
+    { label: '2주택 → 3주택 (8%)',     rate: 8.0 },
+    { label: '3주택 이상 (12%)',        rate: 12.0 },
+    { label: '공시가 1억 미만 (1.1%)', rate: 1.1 },
+    { label: '오피스텔/상가 (4.6%)',   rate: 4.6 },
+  ],
+  '개인매매사업자': [
+    { label: '무주택 → 1주택 (1.1%)',  rate: 1.1 },
+    { label: '1주택 → 2주택 (1.1%)',   rate: 1.1 },
+    { label: '2주택 → 3주택 (8%)',     rate: 8.0 },
+    { label: '3주택 이상 (12%)',        rate: 12.0 },
+    { label: '공시가 1억 미만 (1.1%)', rate: 1.1 },
+    { label: '오피스텔/상가 (4.6%)',   rate: 4.6 },
+  ],
+  '법인사업자': [
+    { label: '공시가 1억 이상 · 주택 (12%)', rate: 12.0 },
+    { label: '공시가 1억 미만 (1.1%)',       rate: 1.1 },
+    { label: '오피스텔/상가 (4.6%)',         rate: 4.6 },
+  ],
+};
+
+const TRANSFER_TAX_SCENARIOS = {
+  '개인': [
+    { label: '직접입력',                        rate: null },
+    { label: '1년 미만 보유 (70%)',             rate: 70 },
+    { label: '1~2년 보유 (60%)',                rate: 60 },
+    { label: '2년이상 · 1,400만 이하 (6%)',    rate: 6 },
+    { label: '2년이상 · 1,400~5,000만 (15%)', rate: 15 },
+    { label: '2년이상 · 5,000~8,800만 (24%)', rate: 24 },
+    { label: '2년이상 · 8,800만~1.5억 (35%)', rate: 35 },
+    { label: '2년이상 · 1.5억~3억 (38%)',     rate: 38 },
+    { label: '2년이상 · 3억~5억 (40%)',       rate: 40 },
+    { label: '2년이상 · 5억 초과 (42%)',      rate: 42 },
+  ],
+  '개인매매사업자': [
+    { label: '직접입력',                      rate: null },
+    { label: '순수익 1,400만 이하 (6%)',     rate: 6 },
+    { label: '순수익 1,400~5,000만 (15%)',  rate: 15 },
+    { label: '순수익 5,000~8,800만 (24%)',  rate: 24 },
+    { label: '순수익 8,800만~1.5억 (35%)', rate: 35 },
+    { label: '순수익 1.5억~3억 (38%)',     rate: 38 },
+    { label: '순수익 3억~5억 (40%)',       rate: 40 },
+    { label: '순수익 5억 초과 (42%)',      rate: 42 },
+  ],
+  '법인사업자': [
+    { label: '직접입력',      rate: null },
+    { label: '주택 (30%)',   rate: 30 },
+    { label: '비주택 (10%)', rate: 10 },
+  ],
+};
+
+/* ── 드롭다운 옵션 채우기 ── */
+function populateProfitScenarios(type) {
+  const acqSel = document.getElementById('pf-acq-scenario');
+  const trSel  = document.getElementById('pf-transfer-scenario');
+  if (!acqSel || !trSel) return;
+
+  acqSel.innerHTML = (ACQ_TAX_SCENARIOS[type] || [])
+    .map((s, i) => `<option value="${i}">${s.label}</option>`).join('');
+  trSel.innerHTML  = (TRANSFER_TAX_SCENARIOS[type] || [])
+    .map((s, i) => `<option value="${i}">${s.label}</option>`).join('');
 }
 
-/* 취득세 정보 계산 */
-function getAcquisitionTaxInfo(buyerType) {
-  const housing      = parseInt(document.getElementById('header-housing-count')?.value || '0', 10);
-  const itemType     = profitItem?.item_type || '';
-  const officialWon  = (profitItem?.official_price || 0) * 10000; // 만원→원
-
-  const isHousing    = /아파트|빌라|다세대|연립|단독|다가구|주거/.test(itemType);
-  const isOfficetel  = /오피스텔/.test(itemType);
-  const isCommercial = /상가|근린|업무/.test(itemType);
-
-  if (buyerType === '법인사업자') {
-    if (isOfficetel || isCommercial) return { rate: 4.6,  hint: '비주거' };
-    if (officialWon > 0 && officialWon < 100000000) return { rate: 1.1, hint: '공시1억미만' };
-    return { rate: 12, hint: '법인주택' };
+/* ── 취득세 시나리오 변경 ── */
+function onAcqScenarioChange() {
+  const sel = document.getElementById('pf-acq-scenario');
+  const scenario = (ACQ_TAX_SCENARIOS[profitType] || [])[parseInt(sel.value, 10)];
+  if (scenario) {
+    document.getElementById('pf-acq-tax-rate').value = scenario.rate;
   }
-
-  // 개인 / 개인매매사업자
-  if (isOfficetel || isCommercial) return { rate: 4.6, hint: '오피스텔/상가' };
-  if (officialWon > 0 && officialWon < 100000000) return { rate: 1.1, hint: '공시1억미만' };
-  if (housing === 0) return { rate: 1.1, hint: '0→1주택' };
-  if (housing === 1) return { rate: 1.1, hint: '1→2주택' };
-  if (housing === 2) return { rate: 8.0, hint: '2→3주택' };
-  return { rate: 12.0, hint: '3주택+' };
+  calcProfitAll();
 }
 
-/* 누진세율 계산 (과표: 만원 단위) */
-function calcProgressiveTax(base) {
-  if (base <= 0) return 0;
-  const brackets = [
-    [1200,    0.06,    0],
-    [4600,    0.15,  108],
-    [8800,    0.24,  522],
-    [15000,   0.35, 1490],
-    [30000,   0.38, 1940],
-    [50000,   0.40, 2540],
-    [100000,  0.42, 3540],
-    [Infinity,0.45, 6540],
-  ];
-  for (const [limit, rate, deduct] of brackets) {
-    if (base <= limit) return Math.max(0, Math.round(base * rate - deduct));
+/* ── 양도세 시나리오 변경 ── */
+function onTransferScenarioChange() {
+  const sel      = document.getElementById('pf-transfer-scenario');
+  const scenario = (TRANSFER_TAX_SCENARIOS[profitType] || [])[parseInt(sel.value, 10)];
+  if (!scenario) return;
+  const rateEl = document.getElementById('pf-transfer-tax-rate');
+  if (scenario.rate != null) {
+    rateEl.value = scenario.rate;
+    autoCalcTransferTax();
+  } else {
+    rateEl.value = '';
   }
-  return Math.max(0, Math.round(base * 0.45 - 6540));
+  calcProfitAll();
 }
 
-/* 양도세 참고 계산 */
-function calcTransferTaxRef(winning, salePrice, acqTax, legalFee, holding) {
-  const profit = salePrice - winning - acqTax - legalFee - 250; // 기본공제 250만원
-  if (profit <= 0) return { tax: 0, hint: '차익없음' };
-
-  const itemType = profitItem?.item_type || '';
-
-  if (profitType === '법인사업자') {
-    const isHousing = /아파트|빌라|다세대|연립|단독|다가구/.test(itemType);
-    const rate = isHousing ? 0.30 : 0.10;
-    return { tax: Math.round(profit * rate), hint: `${rate * 100}%` };
-  }
-
-  const holdingMo = holding || 0;
-  if (holdingMo < 12) return { tax: Math.round(profit * 0.50), hint: '50%(1년미만)' };
-  if (holdingMo < 24) return { tax: Math.round(profit * 0.40), hint: '40%(2년미만)' };
-  const taxBase = Math.max(0, profit - 250);
-  return { tax: calcProgressiveTax(taxBase), hint: '누진세율(2년+)' };
+/* ── 양도세율 변경 → 양도세 자동계산 ── */
+function onTransferRateChange() {
+  autoCalcTransferTax();
+  calcProfitAll();
 }
 
-/* 수익률 분석 모달 열기 */
+function autoCalcTransferTax() {
+  const rate = parseFloat(document.getElementById('pf-transfer-tax-rate')?.value || '') || 0;
+  if (!rate) return;
+  const g = id => parseFloat(document.getElementById(id)?.value || '0') || 0;
+  const raw = id => parseFloat(document.getElementById(id)?.dataset.raw || '0') || 0;
+  const salePrice  = g('pf-sale-price');
+  const winning    = g('pf-winning');
+  const acqTax     = raw('pf-acq-tax');
+  const interior   = raw('pf-interior');
+  const legalFee   = raw('pf-legal-fee');
+  const totalInt   = raw('pf-total-int');
+  const brokerage  = raw('pf-brokerage');
+  const base = salePrice - winning - acqTax - interior - legalFee - totalInt - brokerage;
+  const tax  = base > 0 ? Math.round(base * rate / 100) : 0;
+  document.getElementById('pf-transfer-tax').value = tax;
+}
+
+/* ── 모달 열기 ── */
 async function openProfitModal(myAuctionId) {
   profitItem = myAuctionData.find(r => r.id === myAuctionId) ||
                myAuctionFiltered.find(r => r.id === myAuctionId);
   if (!profitItem) return;
-
   document.getElementById('profit-modal').style.display = '';
   fillProfitItemInfo(profitItem);
-
-  // 저장된 분석 로드
   try {
     const analyses = await fetch(`/api/profit-analysis/${myAuctionId}`).then(r => r.json());
     profitSaved = {};
     if (Array.isArray(analyses)) analyses.forEach(a => { profitSaved[a.buyer_type] = a; });
   } catch (_) { profitSaved = {}; }
-
-  // 첫 탭으로 전환
   switchProfitTab('개인');
 }
 
-/* 모달 닫기 */
+/* ── 모달 닫기 ── */
 function closeProfitModal() {
   document.getElementById('profit-modal').style.display = 'none';
   profitItem  = null;
   profitSaved = {};
 }
 
-/* 탭 전환 */
+/* ── 탭 전환 ── */
 function switchProfitTab(type) {
   profitType = type;
-  document.querySelectorAll('.profit-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.type === type);
-  });
-
+  document.querySelectorAll('.profit-tab').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.type === type));
+  populateProfitScenarios(type);
   const saved = profitSaved[type];
-  if (saved) {
-    loadProfitFields(saved);
-  } else {
-    resetProfitFields();
-    autoFillProfitFromItem();
-  }
+  if (saved) { loadProfitFields(saved); } else { resetProfitFields(); autoFillProfitFromItem(); }
   calcProfitAll();
   document.getElementById('profit-save-status').textContent =
     saved ? `마지막 저장: ${(saved.updated_at || '').slice(0, 16).replace('T', ' ')}` : '';
 }
 
-/* 물건 정보 표시 */
+/* ── 물건 정보 표시 ── */
 function fillProfitItemInfo(item) {
-  document.getElementById('pi-item-type').textContent    = item.item_type || '-';
-  document.getElementById('pi-address').textContent      = item.address || '-';
-  document.getElementById('pi-appraisal').textContent    = item.appraisal_price != null ? fmtAmt(item.appraisal_price) + '만원' : '-';
-  document.getElementById('pi-min-price').textContent    = item.min_price != null ? fmtAmt(item.min_price) + '만원' : '-';
-  document.getElementById('pi-official').textContent     = item.official_price != null ? fmtAmt(item.official_price) + '만원' : '-';
+  document.getElementById('pi-item-type').textContent     = item.item_type || '-';
+  document.getElementById('pi-address').textContent       = item.address || '-';
+  document.getElementById('pi-appraisal').textContent     = item.appraisal_price != null ? fmtWon(item.appraisal_price) : '-';
+  document.getElementById('pi-min-price').textContent     = item.min_price != null ? fmtWon(item.min_price) : '-';
+  document.getElementById('pi-official').textContent      = item.official_price != null ? fmtWon(item.official_price) : '-';
   const pyeong = item.building_area;
   document.getElementById('pi-building-area').textContent = pyeong != null
     ? `${pyeong}평 (${(pyeong * 3.3058).toFixed(1)}㎡)` : '-';
@@ -2656,60 +2690,86 @@ function fillProfitItemInfo(item) {
     item.case_no ? ` — ${item.case_no}` : '';
 }
 
-/* 저장된 값 폼에 로드 */
+/* ── 저장된 값 로드 ── */
 function loadProfitFields(saved) {
   const map = {
-    'pf-winning':      'winning_price',
-    'pf-acq-tax-rate': 'acq_tax_rate',
-    'pf-other-cost':   'other_cost',
-    'pf-loan':         'loan_amount',
-    'pf-loan-rate':    'loan_rate',
-    'pf-holding':      'holding_months',
-    'pf-sale-price':   'sale_price',
-    'pf-transfer-tax': 'transfer_tax',
+    'pf-winning':           'winning_price',
+    'pf-loan-ratio':        'loan_ratio',
+    'pf-acq-tax-rate':      'acq_tax_rate',
+    'pf-acquired-deposit':  'acquired_deposit',
+    'pf-unpaid-maintenance':'unpaid_maintenance',
+    'pf-jeonse-deposit':    'jeonse_deposit',
+    'pf-monthly-rent':      'monthly_rent',
+    'pf-rent-months':       'rent_months',
+    'pf-loan-rate':         'loan_rate',
+    'pf-holding':           'holding_months',
+    'pf-transfer-tax-rate': 'transfer_tax_rate',
+    'pf-transfer-tax':      'transfer_tax',
+    'pf-sale-price':        'sale_price',
   };
   Object.entries(map).forEach(([elId, key]) => {
     const el = document.getElementById(elId);
-    if (!el) return;
-    el.value = saved[key] != null ? saved[key] : '';
-    el.removeAttribute('data-manual');
+    if (el && saved[key] != null) el.value = saved[key];
   });
-  const rateEl = document.getElementById('pf-acq-tax-rate');
-  if (rateEl && saved.acq_tax_rate != null) rateEl.dataset.manual = '1';
-
-  // 감정가대비 재계산
+  // 취득세 시나리오 복원
+  if (saved.acq_tax_scenario) {
+    const scenarios = ACQ_TAX_SCENARIOS[profitType] || [];
+    const idx = scenarios.findIndex(s => s.label === saved.acq_tax_scenario);
+    if (idx >= 0) document.getElementById('pf-acq-scenario').value = idx;
+  }
+  // 양도세 시나리오 복원
+  if (saved.transfer_tax_scenario) {
+    const scenarios = TRANSFER_TAX_SCENARIOS[profitType] || [];
+    const idx = scenarios.findIndex(s => s.label === saved.transfer_tax_scenario);
+    if (idx >= 0) document.getElementById('pf-transfer-scenario').value = idx;
+  }
+  // 감정가대비% 재계산
   const winning   = parseFloat(document.getElementById('pf-winning').value) || 0;
   const appraisal = profitItem?.appraisal_price || 0;
   if (appraisal > 0 && winning > 0)
     document.getElementById('pf-appraisal-ratio').value = (winning / appraisal * 100).toFixed(1);
-  updateTransferHint();
 }
 
-/* 폼 초기화 */
+/* ── 폼 초기화 ── */
 function resetProfitFields() {
-  ['pf-winning','pf-appraisal-ratio','pf-other-cost',
-   'pf-loan','pf-loan-rate','pf-holding',
-   'pf-sale-price','pf-transfer-tax'].forEach(id => {
+  ['pf-winning','pf-appraisal-ratio','pf-loan-ratio',
+   'pf-acq-tax-rate','pf-acquired-deposit','pf-unpaid-maintenance',
+   'pf-jeonse-deposit','pf-monthly-rent','pf-rent-months',
+   'pf-loan-rate','pf-holding','pf-sale-price',
+   'pf-transfer-tax-rate','pf-transfer-tax'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) { el.value = ''; el.removeAttribute('data-manual'); }
+    if (el) el.value = '';
   });
+  const acqSel = document.getElementById('pf-acq-scenario');
+  const trSel  = document.getElementById('pf-transfer-scenario');
+  if (acqSel) acqSel.selectedIndex = 0;
+  if (trSel)  trSel.selectedIndex  = 0;
 }
 
-/* 물건 데이터 자동 채우기 */
+/* ── 자동 초기값 채우기 ── */
 function autoFillProfitFromItem() {
   if (!profitItem) return;
-  const minPrice  = profitItem.min_price  || 0;
+  const minPrice  = profitItem.min_price      || 0;
   const appraisal = profitItem.appraisal_price || 0;
   document.getElementById('pf-winning').value = minPrice || '';
   if (appraisal > 0 && minPrice > 0)
     document.getElementById('pf-appraisal-ratio').value = (minPrice / appraisal * 100).toFixed(1);
-  const taxInfo = getAcquisitionTaxInfo(profitType);
-  document.getElementById('pf-acq-tax-rate').value = taxInfo.rate;
-  document.getElementById('pf-acq-tax-hint').textContent = taxInfo.hint;
-  updateTransferHint();
+  // 취득세 시나리오: 물건 유형 기준 자동 선택
+  const itemType   = profitItem.item_type || '';
+  const officialWon = (profitItem.official_price || 0) * 10000;
+  const scenarios  = ACQ_TAX_SCENARIOS[profitType] || [];
+  let acqIdx = 0;
+  if (/오피스텔/.test(itemType) || /상가|근린|업무/.test(itemType)) {
+    acqIdx = scenarios.findIndex(s => s.label.includes('오피스텔'));
+  } else if (officialWon > 0 && officialWon < 100000000) {
+    acqIdx = scenarios.findIndex(s => s.label.includes('1억 미만'));
+  }
+  const acqSel = document.getElementById('pf-acq-scenario');
+  if (acqSel && acqIdx >= 0) acqSel.selectedIndex = acqIdx;
+  document.getElementById('pf-acq-tax-rate').value = (scenarios[acqIdx] || scenarios[0])?.rate || 1.1;
 }
 
-/* 낙찰가 입력 → 감정가대비% 업데이트 */
+/* ── 낙찰가 ↔ 감정가대비% 연동 ── */
 function onProfitWinningChange() {
   const winning   = parseFloat(document.getElementById('pf-winning').value) || 0;
   const appraisal = profitItem?.appraisal_price || 0;
@@ -2717,8 +2777,6 @@ function onProfitWinningChange() {
     document.getElementById('pf-appraisal-ratio').value = (winning / appraisal * 100).toFixed(1);
   calcProfitAll();
 }
-
-/* 감정가대비% 입력 → 낙찰가 업데이트 */
 function onProfitRatioChange() {
   const ratio     = parseFloat(document.getElementById('pf-appraisal-ratio').value) || 0;
   const appraisal = profitItem?.appraisal_price || 0;
@@ -2727,182 +2785,200 @@ function onProfitRatioChange() {
   calcProfitAll();
 }
 
-/* 전체 계산 */
+/* ── 전체 계산 ── */
 function calcProfitAll() {
   if (!profitItem) return;
-  const g = id => parseFloat(document.getElementById(id)?.value || '0') || 0;
+  const g   = id => parseFloat(document.getElementById(id)?.value || '0') || 0;
+  const raw = id => parseFloat(document.getElementById(id)?.dataset.raw || '0') || 0;
 
-  const winning       = g('pf-winning');
-  const taxRate       = g('pf-acq-tax-rate');
-  const otherCost     = g('pf-other-cost');
-  const loan          = g('pf-loan');
-  const loanRate      = g('pf-loan-rate');
-  const holding       = g('pf-holding');
-  const salePrice     = g('pf-sale-price');
-  const transferTax   = g('pf-transfer-tax');
-  const minPrice      = profitItem.min_price      || 0;
-  const pyeong        = profitItem.building_area  || 0;
-  const sqm           = pyeong * 3.3058;
+  const winning    = g('pf-winning');
+  const loanRatio  = g('pf-loan-ratio');
+  const taxRate    = g('pf-acq-tax-rate');
+  const acqDep     = g('pf-acquired-deposit');
+  const unpaidMnt  = g('pf-unpaid-maintenance');
+  const loanRate   = g('pf-loan-rate');
+  const holding    = g('pf-holding');
+  const jeonse     = g('pf-jeonse-deposit');
+  const mRent      = g('pf-monthly-rent');
+  const rentMo     = g('pf-rent-months');
+  const salePrice  = g('pf-sale-price');
+  const transferTax = g('pf-transfer-tax');
+  const minPrice   = profitItem.min_price     || 0;
+  const pyeong     = profitItem.building_area || 0;
 
-  // 취득세
-  const acqTax    = Math.round(winning * taxRate / 100);
-  setVal('pf-acq-tax', acqTax);
+  /* ── 초기투자비용 ── */
+  // 은행대출
+  const loan = Math.round(winning * loanRatio / 100);
+  setVal('pf-loan', loan);
 
-  // 입찰보증금 = 최저가 × 10%
-  const deposit   = Math.round(minPrice * 0.1);
+  // 입찰보증금
+  const deposit = Math.round(minPrice * 0.1);
   setVal('pf-deposit', deposit);
 
-  // 납부잔금 = 낙찰가 - 입찰보증금
-  setVal('pf-remaining', Math.max(0, winning - deposit));
+  // 납부잔금 = 낙찰가 - 대출 - 보증금
+  setVal('pf-remaining', Math.max(0, winning - loan - deposit));
 
-  // 법무사비 = 낙찰가 × 0.5%
-  const legalFee  = Math.round(winning * 0.005);
-  setVal('pf-legal-fee', legalFee);
+  // 취득세
+  const acqTax = Math.round(winning * taxRate / 100);
+  setVal('pf-acq-tax', acqTax);
 
-  // 명도비 = ㎡ × 1.5만원
-  const eviction  = Math.round(sqm * 1.5);
+  // 명도비 = 평 × 5만
+  const eviction = Math.round(pyeong * 5);
   setVal('pf-eviction', eviction);
 
-  // 인테리어비 = 평 × 20만원
-  const interior  = Math.round(pyeong * 20);
+  // 인테리어 = 평 × 20만
+  const interior = Math.round(pyeong * 20);
   setVal('pf-interior', interior);
 
-  // 취득 총비용
-  const totalCost = winning + acqTax + legalFee + eviction + interior + otherCost;
-  const totalCostEl = document.getElementById('pf-total-cost');
-  if (totalCostEl) totalCostEl.textContent = fmtAmt(Math.round(totalCost)) + ' 만원';
+  // 법무사비 = 낙찰가 × 0.5% (법인: 100만 고정)
+  const legalFee = profitType === '법인사업자'
+    ? 100
+    : Math.round(winning * 0.005);
+  setVal('pf-legal-fee', legalFee);
 
-  // 대출 이자
+  // 비용소계(a)
+  const costSubtotal = acqTax + acqDep + eviction + interior + legalFee + unpaidMnt;
+  setSubtotal('pf-cost-subtotal', costSubtotal);
+
+  // 자기자본 = 낙찰가 - 대출 + 비용소계
+  const ownCapital = Math.max(0, winning - loan + costSubtotal);
+  setSubtotal('pf-own-capital', ownCapital);
+
+  // 총투자금액 = 낙찰가 + 비용소계
+  const totalInvest = winning + costSubtotal;
+  setSubtotal('pf-total-invest', totalInvest);
+
+  /* ── 수입 ── */
+  const incomeSubtotal = jeonse + mRent * rentMo;
+  setSubtotal('pf-income-subtotal', incomeSubtotal);
+
+  /* ── 지출 ── */
   const monthlyInt = Math.round(loan * loanRate / 100 / 12);
   const totalInt   = Math.round(monthlyInt * holding);
   setVal('pf-monthly-int', monthlyInt);
   setVal('pf-total-int', totalInt);
 
-  // 중개수수료 = 매도금액 × 0.4%
   const brokerage = Math.round(salePrice * 0.004);
   setVal('pf-brokerage', brokerage);
 
-  // 양도세 참고값
-  updateTransferHint(winning, salePrice, acqTax, legalFee, holding);
+  // 지출소계(b)
+  const expenseSubtotal = totalInt + transferTax + brokerage;
+  setSubtotal('pf-expense-subtotal', expenseSubtotal);
 
-  // 최저가대비
-  const minRatioEl = document.getElementById('pf-min-ratio');
-  if (minRatioEl) {
-    minRatioEl.textContent = minPrice > 0 ? (winning / minPrice * 100).toFixed(1) + '%' : '-';
+  /* ── 최종 결과 ── */
+  const totalCost = costSubtotal + expenseSubtotal;
+  const netProfit = (salePrice - winning) - totalCost;
+  const profitRate = ownCapital > 0 ? (netProfit / ownCapital * 100) : 0;
+
+  const tcEl   = document.getElementById('pf-total-cost');
+  const ocEl   = document.getElementById('pf-own-capital-result');
+  const npEl   = document.getElementById('pf-net-profit');
+  const prEl   = document.getElementById('pf-profit-rate');
+  if (tcEl) tcEl.textContent = fmtWon(Math.round(totalCost));
+  if (ocEl) ocEl.textContent = fmtWon(Math.round(ownCapital));
+  if (npEl) {
+    npEl.textContent = (netProfit >= 0 ? '+' : '') + (Math.round(netProfit) * 10000).toLocaleString() + '원';
+    npEl.className   = 'profit-result-val profit-result-main ' + (netProfit >= 0 ? 'profit-pos' : 'profit-neg');
   }
-
-  // 총투자금 = 자기자본 = 낙찰가 - 대출금 + 취득세 + 법무사비 + 명도비 + 인테리어비 + 기타비용
-  const totalInvest = Math.max(0, winning - loan + acqTax + legalFee + eviction + interior + otherCost);
-
-  // 순수익
-  const netProfit = salePrice - winning - acqTax - legalFee - eviction - interior - otherCost - totalInt - brokerage - transferTax;
-
-  // 수익률
-  const profitRate = totalInvest > 0 ? (netProfit / totalInvest * 100) : 0;
-
-  const investEl  = document.getElementById('pf-total-invest');
-  const profitEl  = document.getElementById('pf-net-profit');
-  const rateEl    = document.getElementById('pf-profit-rate');
-  if (investEl) investEl.textContent = fmtAmt(Math.round(totalInvest)) + ' 만원';
-  if (profitEl) {
-    profitEl.textContent  = (netProfit >= 0 ? '+' : '') + fmtAmt(Math.round(netProfit)) + ' 만원';
-    profitEl.className    = 'profit-result-val profit-result-main ' + (netProfit >= 0 ? 'profit-pos' : 'profit-neg');
-  }
-  if (rateEl) {
-    rateEl.textContent = profitRate.toFixed(1) + '%';
-    rateEl.className   = 'profit-result-val profit-result-main ' + (profitRate >= 0 ? 'profit-pos' : 'profit-neg');
+  if (prEl) {
+    prEl.textContent = profitRate.toFixed(1) + '%';
+    prEl.className   = 'profit-result-val profit-result-main ' + (profitRate >= 0 ? 'profit-pos' : 'profit-neg');
   }
 }
 
-/* 양도세 참고 힌트 업데이트 */
-function updateTransferHint(winning, salePrice, acqTax, legalFee, holding) {
-  const hintEl = document.getElementById('pf-transfer-hint');
-  if (!hintEl) return;
-  if (winning == null) {
-    winning   = parseFloat(document.getElementById('pf-winning')?.value || '0') || 0;
-    salePrice = parseFloat(document.getElementById('pf-sale-price')?.value || '0') || 0;
-    acqTax    = parseFloat(document.getElementById('pf-acq-tax')?.value || '0') || 0;
-    legalFee  = parseFloat(document.getElementById('pf-legal-fee')?.value || '0') || 0;
-    holding   = parseFloat(document.getElementById('pf-holding')?.value || '0') || 0;
-  }
-  const ref = calcTransferTaxRef(winning, salePrice, acqTax, legalFee, holding);
-  hintEl.textContent = ref.hint === '차익없음'
-    ? '차익없음' : `참고: ~${fmtAmt(ref.tax)}만(${ref.hint})`;
+/* ── 소계 표시 헬퍼 ── */
+function setSubtotal(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = fmtWon(Math.round(val));
 }
 
-/* 취득세율 수동 변경 */
-document.addEventListener('input', e => {
-  if (e.target.id === 'pf-acq-tax-rate') e.target.dataset.manual = '1';
-});
-
-/* setVal 헬퍼 */
+/* ── setVal 헬퍼 ── */
 function setVal(id, val) {
   const el = document.getElementById(id);
-  if (el) el.value = val != null && !isNaN(val) ? Math.round(val) : '';
+  if (!el) return;
+  const num = (val != null && !isNaN(val)) ? Math.round(val) : null;
+  el.dataset.raw = num != null ? num : '';
+  el.value = num != null ? fmtWon(num) : '';
 }
 
-/* 수익률 분석 저장 */
+/* ── 저장 ── */
 async function saveProfitAnalysis() {
   if (!profitItem) return;
   const g = id => {
-    const v = parseFloat(document.getElementById(id)?.value || '');
+    const el = document.getElementById(id);
+    if (!el) return null;
+    if (el.dataset.raw !== undefined && el.dataset.raw !== '') return parseFloat(el.dataset.raw) || null;
+    const v = parseFloat(el.value || '');
     return isNaN(v) ? null : v;
   };
+  const selLabel = (id, table) => {
+    const sel = document.getElementById(id);
+    if (!sel) return null;
+    return (table[profitType] || [])[parseInt(sel.value, 10)]?.label || null;
+  };
 
-  const winning     = g('pf-winning')    || 0;
-  const acqTaxRate  = g('pf-acq-tax-rate') || 0;
-  const acqTax      = g('pf-acq-tax')   || 0;
-  const deposit     = g('pf-deposit')   || 0;
-  const remaining   = g('pf-remaining') || 0;
-  const legalFee    = g('pf-legal-fee') || 0;
-  const eviction    = g('pf-eviction')  || 0;
-  const interior    = g('pf-interior')  || 0;
-  const otherCost   = g('pf-other-cost') ?? 0;
-  const loan        = g('pf-loan')      ?? 0;
-  const loanRate    = g('pf-loan-rate') ?? 0;
-  const holding     = g('pf-holding')   ?? 0;
-  const monthlyInt  = g('pf-monthly-int') || 0;
-  const totalInt    = g('pf-total-int')   || 0;
-  const salePrice   = g('pf-sale-price') || 0;
-  const brokerage   = g('pf-brokerage')  || 0;
-  const transferTax = g('pf-transfer-tax') ?? 0;
+  const winning      = g('pf-winning')    || 0;
+  const loan         = g('pf-loan')       || 0;
+  const acqTax       = g('pf-acq-tax')    || 0;
+  const deposit      = g('pf-deposit')    || 0;
+  const remaining    = g('pf-remaining')  || 0;
+  const legalFee     = g('pf-legal-fee')  || 0;
+  const eviction     = g('pf-eviction')   || 0;
+  const interior     = g('pf-interior')   || 0;
+  const monthlyInt   = g('pf-monthly-int')|| 0;
+  const totalInt     = g('pf-total-int')  || 0;
+  const brokerage    = g('pf-brokerage')  || 0;
+  const loanRatio    = parseFloat(document.getElementById('pf-loan-ratio')?.value || '') || null;
+  const acqTaxRate   = parseFloat(document.getElementById('pf-acq-tax-rate')?.value || '') || null;
+  const acqDep       = parseFloat(document.getElementById('pf-acquired-deposit')?.value || '') || null;
+  const unpaidMnt    = parseFloat(document.getElementById('pf-unpaid-maintenance')?.value || '') || null;
+  const jeonse       = parseFloat(document.getElementById('pf-jeonse-deposit')?.value || '') || null;
+  const mRent        = parseFloat(document.getElementById('pf-monthly-rent')?.value || '') || null;
+  const rentMo       = parseFloat(document.getElementById('pf-rent-months')?.value || '') || null;
+  const loanRate     = parseFloat(document.getElementById('pf-loan-rate')?.value || '') || null;
+  const holding      = parseFloat(document.getElementById('pf-holding')?.value || '') || null;
+  const trRate       = parseFloat(document.getElementById('pf-transfer-tax-rate')?.value || '') || null;
+  const transferTax  = parseFloat(document.getElementById('pf-transfer-tax')?.value || '') || null;
+  const salePrice    = parseFloat(document.getElementById('pf-sale-price')?.value || '') || null;
 
-  const totalInvest = Math.max(0, winning - loan + acqTax + legalFee + eviction + interior + otherCost);
-  const netProfit   = salePrice - winning - acqTax - legalFee - eviction - interior - otherCost - totalInt - brokerage - transferTax;
-  const profitRate  = totalInvest > 0 ? parseFloat((netProfit / totalInvest * 100).toFixed(2)) : null;
+  const acqScenario  = selLabel('pf-acq-scenario', ACQ_TAX_SCENARIOS);
+  const trScenario   = selLabel('pf-transfer-scenario', TRANSFER_TAX_SCENARIOS);
+
+  const costSub  = acqTax + (acqDep||0) + eviction + interior + legalFee + (unpaidMnt||0);
+  const ownCap   = Math.max(0, winning - loan + costSub);
+  const totalInv = winning + costSub;
+  const incomeSub = (jeonse||0) + (mRent||0) * (rentMo||0);
+  const expSub    = totalInt + (transferTax||0) + brokerage;
+  const totalCost = costSub + expSub;
+  const netProfit = ((salePrice||0) - winning) - totalCost;
+  const profitRate = ownCap > 0 ? parseFloat((netProfit / ownCap * 100).toFixed(2)) : null;
 
   const payload = {
-    my_auction_id: profitItem.id,
-    buyer_type:    profitType,
-    winning_price: winning,
-    acq_tax_rate:  acqTaxRate,
-    acq_tax:       acqTax,
-    bid_deposit:   deposit,
-    remaining,
-    legal_fee:     legalFee,
-    eviction_cost: eviction,
-    interior_cost: interior,
-    other_cost:    otherCost,
-    loan_amount:   loan,
-    loan_rate:     loanRate,
-    holding_months: holding,
-    monthly_int:   monthlyInt,
-    total_int:     totalInt,
-    sale_price:    salePrice,
-    brokerage_fee: brokerage,
-    transfer_tax:  transferTax,
-    total_invest:  Math.round(totalInvest),
-    net_profit:    Math.round(netProfit),
-    profit_rate:   profitRate,
+    my_auction_id: profitItem.id, buyer_type: profitType,
+    winning_price: winning, loan_ratio: loanRatio, loan_amount: loan,
+    acq_tax_scenario: acqScenario, acq_tax_rate: acqTaxRate, acq_tax: acqTax,
+    bid_deposit: deposit, remaining, legal_fee: legalFee,
+    eviction_cost: eviction, interior_cost: interior,
+    acquired_deposit: acqDep, unpaid_maintenance: unpaidMnt,
+    cost_subtotal: Math.round(costSub), own_capital: Math.round(ownCap),
+    jeonse_deposit: jeonse, monthly_rent: mRent, rent_months: rentMo,
+    income_subtotal: Math.round(incomeSub),
+    loan_rate: loanRate, holding_months: holding,
+    monthly_int: monthlyInt, total_int: totalInt,
+    transfer_tax_scenario: trScenario, transfer_tax_rate: trRate,
+    transfer_tax: transferTax, brokerage_fee: brokerage,
+    expense_subtotal: Math.round(expSub),
+    sale_price: salePrice,
+    total_invest: Math.round(totalInv), net_profit: Math.round(netProfit),
+    profit_rate: profitRate,
   };
 
   const statusEl = document.getElementById('profit-save-status');
   if (statusEl) statusEl.textContent = '저장 중...';
   try {
     const res = await fetch('/api/profit-analysis', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error((await res.json()).error || '저장 실패');
     const result = await res.json();
