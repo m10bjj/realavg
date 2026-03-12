@@ -1907,6 +1907,16 @@ function startEditMyCell(cell) {
       });
       const row = myAuctionData.find(r => r.id === id);
       if (row) row[field] = body[field];
+      // 수익률분석 모달이 같은 물건을 보고 있으면 매도금액 동기화
+      if (field === 'sale_market' && profitItem && profitItem.id === id) {
+        profitItem.sale_market = body[field];
+        const saleEl = document.getElementById('pf-sale-price');
+        if (saleEl) {
+          if (body[field] != null) setWonInput('pf-sale-price', body[field]);
+          else { saleEl.value = ''; saleEl.dataset.raw = ''; }
+          calcProfitAll();
+        }
+      }
     } catch (_) {}
     renderMyAuctionTable();
   };
@@ -2783,6 +2793,32 @@ function resetProfitFields() {
   const trSel  = document.getElementById('pf-transfer-scenario');
   if (acqSel) acqSel.selectedIndex = 0;
   if (trSel)  trSel.selectedIndex  = 0;
+}
+
+/* ── 매도금액 ↔ 매매시세 동기화 ── */
+function onSalePriceBlur() {
+  const el = document.getElementById('pf-sale-price');
+  wonBlur(el);
+  if (!profitItem) return;
+  const manWon = el.dataset.raw ? Math.round(parseFloat(el.dataset.raw) / 10000) : null;
+  // 로컬 데이터 업데이트
+  profitItem.sale_market = manWon;
+  [myAuctionData, myAuctionFiltered].forEach(arr => {
+    const r = arr.find(x => x.id === profitItem.id);
+    if (r) r.sale_market = manWon;
+  });
+  // DB 저장
+  fetch(`/api/my-auction/${profitItem.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sale_market: manWon }),
+  }).catch(() => {});
+  // 테이블 셀 즉시 업데이트
+  const cell = document.querySelector(`tr[data-id="${profitItem.id}"] td[data-field="sale_market"]`);
+  if (cell) {
+    cell.dataset.val = manWon ?? '';
+    cell.innerHTML = fmtAmt(manWon);
+  }
 }
 
 /* ── 자동 초기값 채우기 ── */
