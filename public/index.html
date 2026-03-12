@@ -1185,7 +1185,8 @@
 
               <div class="profit-field">
                 <label>매도금액 (만원)</label>
-                <input type="number" id="pf-sale-price" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+                <input type="text" id="pf-sale-price" class="profit-input" placeholder="0"
+                  onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
               </div>
             </div>
 

@@ -2701,7 +2701,6 @@ function loadProfitFields(saved) {
     'pf-loan-rate':         'loan_rate',
     'pf-holding':           'holding_months',
     'pf-transfer-tax-rate': 'transfer_tax_rate',
-    'pf-sale-price':        'sale_price',
   };
   Object.entries(map).forEach(([elId, key]) => {
     const el = document.getElementById(elId);
@@ -2709,13 +2708,14 @@ function loadProfitFields(saved) {
   });
   // 원 단위 표시 필드
   ['pf-acquired-deposit','pf-unpaid-maintenance',
-   'pf-jeonse-deposit','pf-monthly-rent','pf-transfer-tax'].forEach(id => {
+   'pf-jeonse-deposit','pf-monthly-rent','pf-transfer-tax','pf-sale-price'].forEach(id => {
     const key = {
       'pf-acquired-deposit':  'acquired_deposit',
       'pf-unpaid-maintenance':'unpaid_maintenance',
       'pf-jeonse-deposit':    'jeonse_deposit',
       'pf-monthly-rent':      'monthly_rent',
       'pf-transfer-tax':      'transfer_tax',
+      'pf-sale-price':        'sale_price',
     }[id];
     if (saved[key] != null) setWonInput(id, saved[key]);
   });
