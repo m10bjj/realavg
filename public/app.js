@@ -2627,19 +2627,22 @@ function onTransferRateChange() {
 function autoCalcTransferTax() {
   const rate = parseFloat(document.getElementById('pf-transfer-tax-rate')?.value || '') || 0;
   if (!rate) return;
-  const g = id => parseFloat(document.getElementById(id)?.value || '0') || 0;
+  // raw(): readonly 자동계산 필드 → 만원
   const raw = id => parseFloat(document.getElementById(id)?.dataset.raw || '0') || 0;
-  const salePrice  = g('pf-sale-price');
-  const winning    = raw('pf-winning');
-  const acqTax     = raw('pf-acq-tax');
-  const interior   = raw('pf-interior');
-  const legalFee   = raw('pf-legal-fee');
-  const totalInt   = raw('pf-total-int');
-  const brokerage  = raw('pf-brokerage');
+  // won(): 원 단위 입력/editable 필드 → 만원으로 변환
+  const won = id => raw(id) / 10000;
+  const salePrice  = won('pf-sale-price');   // 원 입력 필드
+  const winning    = won('pf-winning');       // 원 입력 필드
+  const acqTax     = raw('pf-acq-tax');       // 자동계산 readonly → 만원
+  const interior   = won('pf-interior');      // editable 필드
+  const legalFee   = won('pf-legal-fee');     // editable 필드
+  const totalInt   = raw('pf-total-int');     // 자동계산 readonly → 만원
+  const brokerage  = raw('pf-brokerage');     // 자동계산 readonly → 만원
   const base = salePrice - winning - acqTax - interior - legalFee - totalInt - brokerage;
   const tax  = base > 0 ? Math.round(base * rate / 100) : 0;
+  const taxWon = tax * 10000; // 원 단위로 저장
   const trEl = document.getElementById('pf-transfer-tax');
-  if (trEl) { trEl.dataset.raw = tax; trEl.value = fmtWon(tax); }
+  if (trEl) { trEl.dataset.raw = taxWon; trEl.value = taxWon.toLocaleString() + '원'; }
 }
 
 /* ── 모달 열기 ── */
@@ -2719,6 +2722,22 @@ function loadProfitFields(saved) {
     }[id];
     if (saved[key] != null) setWonInput(id, saved[key]);
   });
+  // 자동계산+수동수정 필드 복원 (저장값 있으면 override 플래그 세팅)
+  const editableMap = {
+    'pf-eviction': 'eviction_cost',
+    'pf-interior': 'interior_cost',
+    'pf-legal-fee': 'legal_fee',
+  };
+  Object.entries(editableMap).forEach(([elId, key]) => {
+    if (saved[key] != null) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      const won = Math.round(saved[key]) * 10000;
+      el.dataset.raw = won;
+      el.dataset.override = '1';
+      el.value = won.toLocaleString() + '원';
+    }
+  });
   // 취득세 시나리오 복원
   if (saved.acq_tax_scenario) {
     const scenarios = ACQ_TAX_SCENARIOS[profitType] || [];
@@ -2734,8 +2753,9 @@ function loadProfitFields(saved) {
   // 낙찰가 원 단위 표시
   const winEl2 = document.getElementById('pf-winning');
   if (winEl2 && saved.winning_price != null) {
-    winEl2.dataset.raw = saved.winning_price;
-    winEl2.value = fmtWon(saved.winning_price);
+    const winWon = Math.round(saved.winning_price) * 10000;
+    winEl2.dataset.raw = winWon;
+    winEl2.value = winWon.toLocaleString() + '원';
   }
   // 감정가대비% 재계산
   const winning   = saved.winning_price || 0;
@@ -2754,6 +2774,11 @@ function resetProfitFields() {
     const el = document.getElementById(id);
     if (el) { el.value = ''; el.dataset.raw = ''; }
   });
+  // 자동계산+수동수정 필드 override 초기화
+  ['pf-eviction','pf-interior','pf-legal-fee'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = ''; el.dataset.raw = ''; el.dataset.override = ''; }
+  });
   const acqSel = document.getElementById('pf-acq-scenario');
   const trSel  = document.getElementById('pf-transfer-scenario');
   if (acqSel) acqSel.selectedIndex = 0;
@@ -2766,8 +2791,9 @@ function autoFillProfitFromItem() {
   const minPrice  = profitItem.min_price      || 0;
   const appraisal = profitItem.appraisal_price || 0;
   const winEl = document.getElementById('pf-winning');
-  winEl.dataset.raw = minPrice || '';
-  winEl.value = minPrice ? fmtWon(minPrice) : '';
+  const minWon = (minPrice || 0) * 10000;
+  winEl.dataset.raw = minWon || '';
+  winEl.value = minWon ? minWon.toLocaleString() + '원' : '';
   if (appraisal > 0 && minPrice > 0)
     document.getElementById('pf-appraisal-ratio').value = (minPrice / appraisal * 100).toFixed(1);
   // 취득세 시나리오: 물건 유형 기준 자동 선택
@@ -2785,24 +2811,41 @@ function autoFillProfitFromItem() {
   document.getElementById('pf-acq-tax-rate').value = (scenarios[acqIdx] || scenarios[0])?.rate || 1.1;
 }
 
-/* ── 만원 입력 → 원 표시 범용 헬퍼 ── */
+/* ── 원 입력/표시 범용 헬퍼 ── */
 function wonFocus(el) {
   if (el.dataset.raw) el.value = el.dataset.raw;
 }
 function wonBlur(el) {
-  const num = parseFloat(el.value) || 0;
-  el.dataset.raw = num || '';
-  el.value = num ? fmtWon(num) : '';
+  const won = parseFloat(el.value.replace(/[^0-9.]/g, '')) || 0;
+  el.dataset.raw = won || '';
+  el.value = won ? won.toLocaleString() + '원' : '';
 }
 function wonInput(el, fn) {
   el.dataset.raw = parseFloat(el.value) || '';
   if (fn) fn();
 }
+/* 자동계산 + 수동 수정 가능 필드 */
+function wonInputEditable(el, fn) {
+  const val = parseFloat(el.value) || 0;
+  el.dataset.raw = val || '';
+  el.dataset.override = val ? '1' : '';
+  if (fn) fn();
+}
+/* DB 저장값(만원) → 원 단위로 입력 필드에 세팅 */
 function setWonInput(id, manWon) {
   const el = document.getElementById(id);
   if (!el || manWon == null) return;
-  el.dataset.raw = manWon;
-  el.value = fmtWon(manWon);
+  const won = Math.round(manWon) * 10000;
+  el.dataset.raw = won;
+  el.value = won.toLocaleString() + '원';
+}
+/* 자동계산 결과(만원)를 override 없을 때만 세팅 */
+function setEditable(id, manWon) {
+  const el = document.getElementById(id);
+  if (!el || el.dataset.override === '1') return;
+  const won = Math.round(manWon) * 10000;
+  el.dataset.raw = won;
+  el.value = won.toLocaleString() + '원';
 }
 
 /* ── 낙찰가 포커스/블러 ── */
@@ -2812,29 +2855,29 @@ function onWinningFocus() {
 }
 function onWinningBlur() {
   const el  = document.getElementById('pf-winning');
-  const num = parseFloat(el.value) || 0;
-  el.dataset.raw = num || '';
-  el.value = num ? fmtWon(num) : '';
+  const won = parseFloat(el.value.replace(/[^0-9.]/g, '')) || 0;
+  el.dataset.raw = won || '';
+  el.value = won ? won.toLocaleString() + '원' : '';
 }
 
 /* ── 낙찰가 ↔ 감정가대비% 연동 ── */
 function onProfitWinningChange() {
-  const el      = document.getElementById('pf-winning');
-  const winning = parseFloat(el.value) || 0;
-  el.dataset.raw = winning || '';
-  const appraisal = profitItem?.appraisal_price || 0;
+  const el  = document.getElementById('pf-winning');
+  const won = parseFloat(el.value) || 0; // 사용자가 원 단위로 입력
+  el.dataset.raw = won || '';
+  const appraisal = profitItem?.appraisal_price || 0; // 만원
   if (appraisal > 0)
-    document.getElementById('pf-appraisal-ratio').value = (winning / appraisal * 100).toFixed(1);
+    document.getElementById('pf-appraisal-ratio').value = ((won / 10000) / appraisal * 100).toFixed(1);
   calcProfitAll();
 }
 function onProfitRatioChange() {
   const ratio     = parseFloat(document.getElementById('pf-appraisal-ratio').value) || 0;
-  const appraisal = profitItem?.appraisal_price || 0;
+  const appraisal = profitItem?.appraisal_price || 0; // 만원
   if (appraisal > 0) {
-    const winning = Math.round(appraisal * ratio / 100);
+    const winningWon = Math.round(appraisal * ratio / 100) * 10000; // 원
     const el = document.getElementById('pf-winning');
-    el.dataset.raw = winning;
-    el.value = fmtWon(winning);
+    el.dataset.raw = winningWon;
+    el.value = winningWon.toLocaleString() + '원';
   }
   calcProfitAll();
 }
@@ -2842,27 +2885,30 @@ function onProfitRatioChange() {
 /* ── 전체 계산 ── */
 function calcProfitAll() {
   if (!profitItem) return;
+  // raw(): readonly 자동계산 필드 - dataset.raw는 만원
   const raw = id => parseFloat(document.getElementById(id)?.dataset.raw || '0') || 0;
-  const g   = id => {
+  // won(): 원 단위 입력 필드 - dataset.raw는 원, 만원으로 변환
+  const won = id => raw(id) / 10000;
+  // g(): 일반 숫자/% 입력 필드
+  const g = id => {
     const el = document.getElementById(id);
     if (!el) return 0;
     if (el.dataset.raw !== undefined && el.dataset.raw !== '') return parseFloat(el.dataset.raw) || 0;
     return parseFloat(el.value || '0') || 0;
   };
 
-  const winEl  = document.getElementById('pf-winning');
-  const winning = parseFloat(winEl?.dataset.raw || winEl?.value || '0') || 0;
+  const winning    = won('pf-winning');
   const loanRatio  = g('pf-loan-ratio');
   const taxRate    = g('pf-acq-tax-rate');
-  const acqDep     = g('pf-acquired-deposit');
-  const unpaidMnt  = g('pf-unpaid-maintenance');
+  const acqDep     = won('pf-acquired-deposit');
+  const unpaidMnt  = won('pf-unpaid-maintenance');
   const loanRate   = g('pf-loan-rate');
   const holding    = g('pf-holding');
-  const jeonse     = g('pf-jeonse-deposit');
-  const mRent      = g('pf-monthly-rent');
+  const jeonse     = won('pf-jeonse-deposit');
+  const mRent      = won('pf-monthly-rent');
   const rentMo     = g('pf-rent-months');
-  const salePrice  = g('pf-sale-price');
-  const transferTax = g('pf-transfer-tax');
+  const salePrice  = won('pf-sale-price');
+  const transferTax = won('pf-transfer-tax');
   const minPrice   = profitItem.min_price     || 0;
   const pyeong     = profitItem.building_area || 0;
 
@@ -2882,19 +2928,18 @@ function calcProfitAll() {
   const acqTax = Math.round(winning * taxRate / 100);
   setVal('pf-acq-tax', acqTax);
 
-  // 명도비 = 평 × 5만
-  const eviction = Math.round(pyeong * 5);
-  setVal('pf-eviction', eviction);
+  // 명도비(이사비or소송비): 자동계산, 수동수정 가능
+  setEditable('pf-eviction', Math.round(pyeong * 5));
+  const eviction = won('pf-eviction');
 
-  // 인테리어 = 평 × 20만
-  const interior = Math.round(pyeong * 20);
-  setVal('pf-interior', interior);
+  // 인테리어/수리/청소: 자동계산, 수동수정 가능
+  setEditable('pf-interior', Math.round(pyeong * 20));
+  const interior = won('pf-interior');
 
-  // 법무사비 = 낙찰가 × 0.5% (법인: 100만 고정)
-  const legalFee = profitType === '법인사업자'
-    ? 100
-    : Math.round(winning * 0.005);
-  setVal('pf-legal-fee', legalFee);
+  // 법무사비 기타 자문비 합계: 자동계산, 수동수정 가능
+  const legalFeeAuto = profitType === '법인사업자' ? 100 : Math.round(winning * 0.005);
+  setEditable('pf-legal-fee', legalFeeAuto);
+  const legalFee = won('pf-legal-fee');
 
   // 비용소계(a)
   const costSubtotal = acqTax + acqDep + eviction + interior + legalFee + unpaidMnt;
@@ -2964,6 +3009,7 @@ function setVal(id, val) {
 /* ── 저장 ── */
 async function saveProfitAnalysis() {
   if (!profitItem) return;
+  // readonly 자동계산 필드 읽기 (dataset.raw = 만원)
   const g = id => {
     const el = document.getElementById(id);
     if (!el) return null;
@@ -2971,35 +3017,41 @@ async function saveProfitAnalysis() {
     const v = parseFloat(el.value || '');
     return isNaN(v) ? null : v;
   };
+  // 원 단위 입력/editable 필드 읽기 (dataset.raw = 원 → 만원으로 변환)
+  const gWon = id => {
+    const v = parseFloat(document.getElementById(id)?.dataset.raw || '') || null;
+    return v != null ? Math.round(v / 10000) : null;
+  };
   const selLabel = (id, table) => {
     const sel = document.getElementById(id);
     if (!sel) return null;
     return (table[profitType] || [])[parseInt(sel.value, 10)]?.label || null;
   };
 
-  const winning      = parseFloat(document.getElementById('pf-winning')?.dataset.raw || '0') || 0;
+  // 낙찰가: dataset.raw = 원 → 만원으로 변환
+  const winning      = (parseFloat(document.getElementById('pf-winning')?.dataset.raw || '0') || 0) / 10000;
   const loan         = g('pf-loan')       || 0;
   const acqTax       = g('pf-acq-tax')    || 0;
   const deposit      = g('pf-deposit')    || 0;
   const remaining    = g('pf-remaining')  || 0;
-  const legalFee     = g('pf-legal-fee')  || 0;
-  const eviction     = g('pf-eviction')   || 0;
-  const interior     = g('pf-interior')   || 0;
+  const legalFee     = gWon('pf-legal-fee')  || 0;  // editable, 원 단위
+  const eviction     = gWon('pf-eviction')   || 0;  // editable, 원 단위
+  const interior     = gWon('pf-interior')   || 0;  // editable, 원 단위
   const monthlyInt   = g('pf-monthly-int')|| 0;
   const totalInt     = g('pf-total-int')  || 0;
   const brokerage    = g('pf-brokerage')  || 0;
   const loanRatio    = parseFloat(document.getElementById('pf-loan-ratio')?.value || '') || null;
   const acqTaxRate   = parseFloat(document.getElementById('pf-acq-tax-rate')?.value || '') || null;
-  const acqDep       = parseFloat(document.getElementById('pf-acquired-deposit')?.value || '') || null;
-  const unpaidMnt    = parseFloat(document.getElementById('pf-unpaid-maintenance')?.value || '') || null;
-  const jeonse       = parseFloat(document.getElementById('pf-jeonse-deposit')?.value || '') || null;
-  const mRent        = parseFloat(document.getElementById('pf-monthly-rent')?.value || '') || null;
+  const acqDep       = gWon('pf-acquired-deposit');    // 원 단위 입력
+  const unpaidMnt    = gWon('pf-unpaid-maintenance');  // 원 단위 입력
+  const jeonse       = gWon('pf-jeonse-deposit');      // 원 단위 입력
+  const mRent        = gWon('pf-monthly-rent');        // 원 단위 입력
   const rentMo       = parseFloat(document.getElementById('pf-rent-months')?.value || '') || null;
   const loanRate     = parseFloat(document.getElementById('pf-loan-rate')?.value || '') || null;
   const holding      = parseFloat(document.getElementById('pf-holding')?.value || '') || null;
   const trRate       = parseFloat(document.getElementById('pf-transfer-tax-rate')?.value || '') || null;
-  const transferTax  = parseFloat(document.getElementById('pf-transfer-tax')?.value || '') || null;
-  const salePrice    = parseFloat(document.getElementById('pf-sale-price')?.value || '') || null;
+  const transferTax  = gWon('pf-transfer-tax');  // 원 단위 입력
+  const salePrice    = gWon('pf-sale-price');    // 원 단위 입력
 
   const acqScenario  = selLabel('pf-acq-scenario', ACQ_TAX_SCENARIOS);
   const trScenario   = selLabel('pf-transfer-scenario', TRANSFER_TAX_SCENARIOS);

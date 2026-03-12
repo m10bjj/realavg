@@ -1047,7 +1047,7 @@
             <!-- 낙찰가 / 감정가대비 -->
             <div class="profit-row profit-row--2">
               <div class="profit-field">
-                <label>낙찰가 <span class="profit-unit-hint">만원 입력</span></label>
+                <label>낙찰가</label>
                 <input type="text" id="pf-winning" class="profit-input" placeholder="0"
                   onfocus="onWinningFocus()" oninput="onProfitWinningChange()" onblur="onWinningBlur()">
               </div>
@@ -1104,12 +1104,12 @@
             <!-- 인수보증금 / 미납관리비 -->
             <div class="profit-row profit-row--2">
               <div class="profit-field">
-                <label>인수보증금 <span class="profit-unit-hint">만원 입력</span></label>
+                <label>인수해야할보증금</label>
                 <input type="text" id="pf-acquired-deposit" class="profit-input" placeholder="0"
                   onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
               </div>
               <div class="profit-field">
-                <label>미납관리비 <span class="profit-unit-hint">만원 입력</span></label>
+                <label>미납관리비</label>
                 <input type="text" id="pf-unpaid-maintenance" class="profit-input" placeholder="0"
                   onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
               </div>
@@ -1118,16 +1118,19 @@
             <!-- 명도비 / 인테리어 / 법무사비 -->
             <div class="profit-row profit-row--3">
               <div class="profit-field">
-                <label>명도비 <span class="profit-formula">평×5만</span></label>
-                <input type="text" id="pf-eviction" class="profit-input profit-auto" readonly>
+                <label>명도비(이사비or소송비) <span class="profit-formula">평×5만</span></label>
+                <input type="text" id="pf-eviction" class="profit-input" placeholder="0"
+                  onfocus="wonFocus(this)" oninput="wonInputEditable(this,calcProfitAll)" onblur="wonBlur(this)">
               </div>
               <div class="profit-field">
-                <label>인테리어 <span class="profit-formula">평×20만</span></label>
-                <input type="text" id="pf-interior" class="profit-input profit-auto" readonly>
+                <label>인테리어/수리/청소 <span class="profit-formula">평×20만</span></label>
+                <input type="text" id="pf-interior" class="profit-input" placeholder="0"
+                  onfocus="wonFocus(this)" oninput="wonInputEditable(this,calcProfitAll)" onblur="wonBlur(this)">
               </div>
               <div class="profit-field">
-                <label>법무사비 <span class="profit-formula">낙찰가×0.5%</span></label>
-                <input type="text" id="pf-legal-fee" class="profit-input profit-auto" readonly>
+                <label>법무사비 기타 자문비 합계 <span class="profit-formula">낙찰가×0.5%</span></label>
+                <input type="text" id="pf-legal-fee" class="profit-input" placeholder="0"
+                  onfocus="wonFocus(this)" oninput="wonInputEditable(this,calcProfitAll)" onblur="wonBlur(this)">
               </div>
             </div>
 
@@ -1136,7 +1139,7 @@
             <!-- 소계 -->
             <div class="profit-subtotal-rows">
               <div class="profit-subtotal-row">
-                <span>비용소계 (a) <small>취득세+인수보증금+명도비+인테리어+법무사비+미납관리비</small></span>
+                <span>비용소계 (a) <small>취득세+인수해야할보증금+명도비+인테리어+법무사비+미납관리비</small></span>
                 <span id="pf-cost-subtotal" class="profit-subtotal-val">-</span>
               </div>
               <div class="profit-subtotal-row">
@@ -1159,12 +1162,12 @@
 
               <div class="profit-row profit-row--2">
                 <div class="profit-field">
-                  <label>전/월세 보증금 <span class="profit-unit-hint">만원 입력</span></label>
+                  <label>전/월세 보증금</label>
                   <input type="text" id="pf-jeonse-deposit" class="profit-input" placeholder="0"
                     onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
                 </div>
                 <div class="profit-field">
-                  <label>월세 <span class="profit-unit-hint">만원 입력</span> × 개월</label>
+                  <label>월세 × 개월</label>
                   <div class="profit-inline">
                     <input type="text" id="pf-monthly-rent" class="profit-input" placeholder="0"
                       onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
@@ -1184,7 +1187,7 @@
               <div class="profit-divider"></div>
 
               <div class="profit-field">
-                <label>매도금액 <span class="profit-unit-hint">만원 입력</span></label>
+                <label>매도금액</label>
                 <input type="text" id="pf-sale-price" class="profit-input" placeholder="0"
                   onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
               </div>
@@ -1227,7 +1230,7 @@
                   <input type="number" id="pf-transfer-tax-rate" class="profit-input" step="0.1" placeholder="0" oninput="onTransferRateChange()">
                 </div>
                 <div class="profit-field">
-                  <label>양도세 <span class="profit-unit-hint">만원 입력</span></label>
+                  <label>양도세</label>
                   <input type="text" id="pf-transfer-tax" class="profit-input" placeholder="0"
                     onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
                 </div>
