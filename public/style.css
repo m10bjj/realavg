@@ -1375,6 +1375,12 @@ body {
   font-weight: 400;
   margin-left: 2px;
 }
+.profit-unit-hint {
+  font-size: 10px;
+  color: #9ca3af;
+  font-weight: 400;
+  margin-left: 2px;
+}
 .profit-auto-hint {
   font-size: 10px;
   color: var(--primary);
