@@ -2809,6 +2809,8 @@ function autoFillProfitFromItem() {
   const acqSel = document.getElementById('pf-acq-scenario');
   if (acqSel && acqIdx >= 0) acqSel.selectedIndex = acqIdx;
   document.getElementById('pf-acq-tax-rate').value = (scenarios[acqIdx] || scenarios[0])?.rate || 1.1;
+  // 매매시세 → 매도금액 기본값
+  if (profitItem.sale_market) setWonInput('pf-sale-price', profitItem.sale_market);
 }
 
 /* ── 원 입력/표시 범용 헬퍼 ── */
