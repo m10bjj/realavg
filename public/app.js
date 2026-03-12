@@ -2638,7 +2638,8 @@ function autoCalcTransferTax() {
   const brokerage  = raw('pf-brokerage');
   const base = salePrice - winning - acqTax - interior - legalFee - totalInt - brokerage;
   const tax  = base > 0 ? Math.round(base * rate / 100) : 0;
-  document.getElementById('pf-transfer-tax').value = tax;
+  const trEl = document.getElementById('pf-transfer-tax');
+  if (trEl) { trEl.dataset.raw = tax; trEl.value = fmtWon(tax); }
 }
 
 /* ── 모달 열기 ── */
@@ -2692,25 +2693,31 @@ function fillProfitItemInfo(item) {
 
 /* ── 저장된 값 로드 ── */
 function loadProfitFields(saved) {
+  // 일반 숫자/퍼센트 필드
   const map = {
-    // pf-winning은 별도 처리 (원 단위 표시)
-    // 'pf-winning': 'winning_price',
     'pf-loan-ratio':        'loan_ratio',
     'pf-acq-tax-rate':      'acq_tax_rate',
-    'pf-acquired-deposit':  'acquired_deposit',
-    'pf-unpaid-maintenance':'unpaid_maintenance',
-    'pf-jeonse-deposit':    'jeonse_deposit',
-    'pf-monthly-rent':      'monthly_rent',
     'pf-rent-months':       'rent_months',
     'pf-loan-rate':         'loan_rate',
     'pf-holding':           'holding_months',
     'pf-transfer-tax-rate': 'transfer_tax_rate',
-    'pf-transfer-tax':      'transfer_tax',
     'pf-sale-price':        'sale_price',
   };
   Object.entries(map).forEach(([elId, key]) => {
     const el = document.getElementById(elId);
     if (el && saved[key] != null) el.value = saved[key];
+  });
+  // 원 단위 표시 필드
+  ['pf-acquired-deposit','pf-unpaid-maintenance',
+   'pf-jeonse-deposit','pf-monthly-rent','pf-transfer-tax'].forEach(id => {
+    const key = {
+      'pf-acquired-deposit':  'acquired_deposit',
+      'pf-unpaid-maintenance':'unpaid_maintenance',
+      'pf-jeonse-deposit':    'jeonse_deposit',
+      'pf-monthly-rent':      'monthly_rent',
+      'pf-transfer-tax':      'transfer_tax',
+    }[id];
+    if (saved[key] != null) setWonInput(id, saved[key]);
   });
   // 취득세 시나리오 복원
   if (saved.acq_tax_scenario) {
@@ -2745,7 +2752,7 @@ function resetProfitFields() {
    'pf-loan-rate','pf-holding','pf-sale-price',
    'pf-transfer-tax-rate','pf-transfer-tax'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.value = '';
+    if (el) { el.value = ''; el.dataset.raw = ''; }
   });
   const acqSel = document.getElementById('pf-acq-scenario');
   const trSel  = document.getElementById('pf-transfer-scenario');
@@ -2776,6 +2783,26 @@ function autoFillProfitFromItem() {
   const acqSel = document.getElementById('pf-acq-scenario');
   if (acqSel && acqIdx >= 0) acqSel.selectedIndex = acqIdx;
   document.getElementById('pf-acq-tax-rate').value = (scenarios[acqIdx] || scenarios[0])?.rate || 1.1;
+}
+
+/* ── 만원 입력 → 원 표시 범용 헬퍼 ── */
+function wonFocus(el) {
+  if (el.dataset.raw) el.value = el.dataset.raw;
+}
+function wonBlur(el) {
+  const num = parseFloat(el.value) || 0;
+  el.dataset.raw = num || '';
+  el.value = num ? fmtWon(num) : '';
+}
+function wonInput(el, fn) {
+  el.dataset.raw = parseFloat(el.value) || '';
+  if (fn) fn();
+}
+function setWonInput(id, manWon) {
+  const el = document.getElementById(id);
+  if (!el || manWon == null) return;
+  el.dataset.raw = manWon;
+  el.value = fmtWon(manWon);
 }
 
 /* ── 낙찰가 포커스/블러 ── */
@@ -2815,8 +2842,13 @@ function onProfitRatioChange() {
 /* ── 전체 계산 ── */
 function calcProfitAll() {
   if (!profitItem) return;
-  const g   = id => parseFloat(document.getElementById(id)?.value || '0') || 0;
   const raw = id => parseFloat(document.getElementById(id)?.dataset.raw || '0') || 0;
+  const g   = id => {
+    const el = document.getElementById(id);
+    if (!el) return 0;
+    if (el.dataset.raw !== undefined && el.dataset.raw !== '') return parseFloat(el.dataset.raw) || 0;
+    return parseFloat(el.value || '0') || 0;
+  };
 
   const winEl  = document.getElementById('pf-winning');
   const winning = parseFloat(winEl?.dataset.raw || winEl?.value || '0') || 0;

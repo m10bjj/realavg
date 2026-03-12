@@ -1105,11 +1105,13 @@
             <div class="profit-row profit-row--2">
               <div class="profit-field">
                 <label>인수보증금 (만원)</label>
-                <input type="number" id="pf-acquired-deposit" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+                <input type="text" id="pf-acquired-deposit" class="profit-input" placeholder="0"
+                  onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
               </div>
               <div class="profit-field">
                 <label>미납관리비 (만원)</label>
-                <input type="number" id="pf-unpaid-maintenance" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+                <input type="text" id="pf-unpaid-maintenance" class="profit-input" placeholder="0"
+                  onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
               </div>
             </div>
 
@@ -1158,12 +1160,14 @@
               <div class="profit-row profit-row--2">
                 <div class="profit-field">
                   <label>전/월세 보증금 (만원)</label>
-                  <input type="number" id="pf-jeonse-deposit" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+                  <input type="text" id="pf-jeonse-deposit" class="profit-input" placeholder="0"
+                    onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
                 </div>
                 <div class="profit-field">
                   <label>월세 (만원) × 개월</label>
                   <div class="profit-inline">
-                    <input type="number" id="pf-monthly-rent" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+                    <input type="text" id="pf-monthly-rent" class="profit-input" placeholder="0"
+                      onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
                     <span class="profit-inline-sep">×</span>
                     <input type="number" id="pf-rent-months" class="profit-input profit-input--sm" placeholder="0" oninput="calcProfitAll()">
                   </div>
@@ -1223,7 +1227,8 @@
                 </div>
                 <div class="profit-field">
                   <label>양도세 (만원)</label>
-                  <input type="number" id="pf-transfer-tax" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+                  <input type="text" id="pf-transfer-tax" class="profit-input" placeholder="0"
+                    onfocus="wonFocus(this)" oninput="wonInput(this,calcProfitAll)" onblur="wonBlur(this)">
                 </div>
               </div>
 
