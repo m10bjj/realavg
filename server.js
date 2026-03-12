@@ -804,6 +804,33 @@ app.delete('/api/my-auction/:id', async (req, res) => {
 });
 
 /* ──────────────────────────────────────────
+   수익률 분석 API
+────────────────────────────────────────── */
+app.get('/api/profit-analysis/:myAuctionId', async (req, res) => {
+  try {
+    const data = await db.getProfitAnalyses(parseInt(req.params.myAuctionId, 10));
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/profit-analysis', async (req, res) => {
+  const { my_auction_id, buyer_type } = req.body;
+  if (!my_auction_id || !buyer_type)
+    return res.status(400).json({ error: 'my_auction_id, buyer_type 필수' });
+  try {
+    const id = await db.upsertProfitAnalysis(req.body);
+    res.json({ success: true, id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/profit-analysis/:id', async (req, res) => {
+  try {
+    await db.deleteProfitAnalysis(parseInt(req.params.id, 10));
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ──────────────────────────────────────────
    서버 시작 / Vercel 내보내기
 ────────────────────────────────────────── */
 if (require.main === module) {

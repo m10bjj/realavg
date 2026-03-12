@@ -189,6 +189,10 @@ document.addEventListener('DOMContentLoaded', () => {
   buildYearDropdown();
   checkApiKey();
   loadCurrentUser();
+  // 현재 주택수 복원
+  const housingEl = document.getElementById('header-housing-count');
+  if (housingEl) housingEl.value = localStorage.getItem('housingCount') || '0';
+  // naver-view가 활성화될 때 showNaverBoard가 불리므로 여기선 생략
 });
 
 function buildCityDropdown() {
@@ -1168,6 +1172,7 @@ function switchView(view) {
 
   if (view === 'auction')    loadAuctions();
   if (view === 'my-auction') loadMyAuctions();
+  if (view === 'naver' && !window._naverActiveId) showNaverBoard();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1802,7 +1807,7 @@ function renderMyAuctionTable() {
   }
 
   if (total === 0) {
-    tbody.innerHTML = '<tr><td colspan="16" class="auction-empty">저장된 데이터가 없습니다.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="22" class="auction-empty">저장된 데이터가 없습니다.</td></tr>';
     renderMyAuctionPagination(1);
     return;
   }
@@ -1831,6 +1836,7 @@ function renderMyAuctionTable() {
       <td class="col-addr" title="${esc(row.address)}">${esc(row.address)}</td>
       <td class="col-notes my-editable" data-id="${row.id}" data-field="check_notes" data-val="${esc(row.check_notes || '')}" title="${esc(row.check_notes)}">${esc(row.check_notes) || '-'}</td>
       <td class="col-date">${savedDate}</td>
+      <td class="col-action"><button class="btn-profit-sm" onclick="openProfitModal(${row.id})" title="수익률 분석">📊</button></td>
       <td class="col-del"><button class="btn-row-del" onclick="deleteOneMyAuction(${row.id})" title="삭제">✕</button></td>
     </tr>`;
   }).join('');
@@ -2049,50 +2055,331 @@ function downloadMyAuctionExcel() {
    네이버부동산 호가 분석
 ═══════════════════════════════════════════════════════ */
 
+function parseNaverBlock(rawLines) {
+  // 빈 줄 제거
+  const lines = rawLines.map(l => l.trim()).filter(l => l);
+  if (lines.length < 7) return null;
+
+  const n = lines.length;
+  // 고정 위치 (끝에서부터)
+  const dateLine  = lines[n - 1]; // 확인매물 YY.MM.DD.
+  const agent     = lines[n - 2]; // 공인중개사명
+  // const src    = lines[n - 3]; // 제공처 (표시 생략)
+  const tagLine   = lines[n - 4]; // 25년이상소형평수...
+  const detail    = lines[2];     // 면적/층/향
+  const priceLine = lines[1];     // 매매/전세/월세 + 가격
+  const nameLine  = lines[0];     // 매물명
+
+  // 자랑거리: index 3 ~ n-5 사이 (없으면 빈 배열)
+  const highlight = lines.slice(3, n - 4).join(' ').trim();
+
+  // 매물명 / 구분
+  let ownerType = '', name = nameLine;
+  if (nameLine.startsWith('현장'))   { ownerType = '현장';   name = nameLine.slice(2); }
+  else if (nameLine.startsWith('집주인')) { ownerType = '집주인'; name = nameLine.slice(3); }
+
+  // 주거종류가 빌라/연립 뿐이면 이름을 빈칸으로
+  const GENERIC = /^(빌라|연립|아파트|오피스텔|단독)$/;
+  if (GENERIC.test(name)) name = '';
+
+  // 가격 라인 파싱
+  let dealType = '', price = '';
+  const priceM = priceLine.match(/^(매매|전세|월세)(.*)/);
+  if (priceM) { dealType = priceM[1]; price = priceM[2].trim(); }
+
+  // 면적/층/향 라인 파싱
+  // 형식: [주거종류][공급]/[전용]m², [해당층]/[전체층]층, [향]
+  let houseType = '', supplyArea = '', exclArea = '', floorCur = '', floorTotal = '', direction = '';
+  if (detail) {
+    const htM = detail.match(/^(다세대|빌라|연립|아파트|오피스텔)/);
+    if (htM) houseType = htM[1];
+
+    const areaM = detail.match(/([\d.]+|-)\/([\d.]+)m²/);
+    if (areaM) { supplyArea = areaM[1]; exclArea = areaM[2]; }
+
+    const floorM = detail.match(/m²,\s*([^/,]+)\/(\d+)층/);
+    if (floorM) { floorCur = floorM[1].trim(); floorTotal = floorM[2]; }
+
+    const dirM = detail.match(/(남동|남서|북동|북서|동|서|남|북)향/);
+    if (dirM) direction = dirM[0];
+  }
+
+  // 건축년수: 태그 첫 단어
+  let buildAge = '';
+  const tagM = tagLine.match(/^(\d+년이(?:상|내))/);
+  if (tagM) buildAge = tagM[1];
+
+  // 확인날짜
+  let confirmDate = '';
+  const dtM = dateLine.match(/확인매물\s+(\d{2}\.\d{2}\.\d{2})/);
+  if (dtM) confirmDate = '20' + dtM[1];
+
+  const exclPyeong = (!isNaN(parseFloat(exclArea)) && parseFloat(exclArea) > 0)
+    ? (parseFloat(exclArea) / 3.3058).toFixed(1) : '-';
+
+  return { ownerType, name, dealType, price, houseType,
+           supplyArea, exclArea, exclPyeong, floorCur, floorTotal, direction,
+           buildAge, agent, confirmDate, highlight };
+}
+
 function parseNaverText(text) {
-  const lines = text.split('\n');
+  // 노이즈 제거
+  const cleaned = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\d+개의 매물사진이 있습니다\.\n?/g, '')
+    .replace(/네이버에서 보기\n?/g, '');
+
+  const lines = cleaned.split('\n');
   const listings = [];
-  const BLOCK = 10;
+  let block = [];
 
-  for (let i = 0; i + BLOCK <= lines.length; i += BLOCK) {
-    const b = lines.slice(i, i + BLOCK);
-
-    const houseType = b[0].trim(); // 주거종류
-    const price     = b[1].trim(); // 가격
-    const detail    = b[2].trim(); // 주거종류 · 공급XX㎡/전용YY㎡ · A/B층 · 향
-    // b[3] 빈줄
-    const highlight = b[4].trim(); // 자랑거리
-    // b[5] 빈줄
-    const ageLine   = b[6].trim(); // XX년된 건물
-    // b[7] 정보제공처 (표시 생략)
-    const agent     = b[8].trim(); // 공인중개사명
-    // b[9] 확인날짜 (표시 생략)
-
-    // detail 파싱: "다세대주택 · 공급 53.78㎡/전용 43.54㎡ · 3/4층 · 남향"
-    let supplyArea = '', exclArea = '', floorCur = '', floorTotal = '', direction = '';
-    detail.split('·').map(s => s.trim()).forEach(part => {
-      const areaM = part.match(/공급\s*([\d.]+)㎡\/전용\s*([\d.]+)㎡/);
-      if (areaM) { supplyArea = areaM[1] + '㎡'; exclArea = areaM[2] + '㎡'; }
-
-      const floorM = part.match(/(\d+)\/(\d+)층/);
-      if (floorM) { floorCur = floorM[1]; floorTotal = floorM[2]; }
-
-      const dirM = part.match(/(남동|남서|북동|북서|동|서|남|북)향/);
-      if (dirM) direction = dirM[0];
-    });
-
-    const area = (supplyArea && exclArea)
-      ? `${supplyArea} / ${exclArea}`
-      : (supplyArea || exclArea || '-');
-
-    // 년식: "13년된 건물" → "13년"
-    const ageM = ageLine.match(/(\d+)년/);
-    const buildAge = ageM ? ageM[1] + '년' : ageLine;
-
-    listings.push({ houseType, price, area, floorCur, floorTotal, direction, buildAge, agent, highlight });
+  for (const line of lines) {
+    block.push(line);
+    // 확인매물 날짜 줄을 만나면 블록 종료
+    if (/^확인매물\s+\d{2}\.\d{2}\.\d{2}/.test(line.trim())) {
+      const listing = parseNaverBlock(block);
+      if (listing) listings.push(listing);
+      block = [];
+    }
   }
 
   return listings;
+}
+
+/* 페이지네이션 상태 */
+window._naverFiltered  = [];
+window._naverPage      = 1;
+window._naverPageSize  = 100;
+
+/* 행 렌더링 - 필터된 전체 목록을 받아 페이지네이션 적용 */
+function renderNaverRows(listings) {
+  window._naverFiltered = listings;
+  window._naverPage = 1;
+  _renderNaverPage();
+}
+
+function _renderNaverPage() {
+  const DEAL_COLOR = { '매매': '#2563eb', '전세': '#7c3aed', '월세': '#b45309' };
+  const tbody = document.getElementById('naver-tbody');
+  if (!tbody) return;
+
+  const total    = window._naverFiltered.length;
+  const size     = window._naverPageSize;
+  const page     = window._naverPage;
+  const start    = (page - 1) * size;
+  const end      = Math.min(start + size, total);
+  const pageData = window._naverFiltered.slice(start, end);
+
+  tbody.innerHTML = pageData.map((r, i) => {
+    const color  = DEAL_COLOR[r.dealType] || '';
+    const supply = (r.supplyArea && r.supplyArea !== '-') ? r.supplyArea : '-';
+    const excl   = r.exclArea   || '-';
+    const pyeong = r.exclPyeong || (excl !== '-' ? (parseFloat(excl) / 3.3058).toFixed(1) : '-');
+    const nameTitle = r.name ? ` title="${esc((r.ownerType || '') + r.name)}"` : '';
+    const seq = start + i + 1;
+    return `<tr>
+      <td class="col-seq"${nameTitle}>${seq}${r.ownerType ? `<br><small style="color:#888">${r.ownerType}</small>` : ''}</td>
+      <td style="text-align:center;font-weight:700;color:${color}">${esc(r.dealType)}</td>
+      <td class="col-price" style="font-weight:600">${esc(r.price)}</td>
+      <td class="col-type">${esc(r.houseType)}</td>
+      <td style="text-align:center;font-size:12px">${esc(supply)}</td>
+      <td style="text-align:center;font-size:12px">${esc(excl)}</td>
+      <td style="text-align:center;font-size:12px;font-weight:600;color:#0f766e">${esc(pyeong)}</td>
+      <td class="col-floor">${esc(r.floorCur)}</td>
+      <td class="col-floor">${esc(r.floorTotal)}</td>
+      <td style="text-align:center">${esc(r.direction)}</td>
+      <td style="text-align:center;font-size:11px">${esc(r.buildAge)}</td>
+      <td style="font-size:12px">${esc(r.agent)}</td>
+      <td style="font-size:11px;text-align:center;white-space:nowrap">${esc(r.confirmDate)}</td>
+      <td class="col-notes">${esc(r.highlight)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="14" class="auction-empty">결과가 없습니다.</td></tr>';
+
+  _renderNaverPagination(total, page, size);
+}
+
+function _renderNaverPagination(total, page, size) {
+  const el = document.getElementById('naver-pagination');
+  if (!el) return;
+  const totalPages = Math.ceil(total / size) || 1;
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const MAX_BTNS = 7;
+  let startP = Math.max(1, page - Math.floor(MAX_BTNS / 2));
+  let endP   = Math.min(totalPages, startP + MAX_BTNS - 1);
+  if (endP - startP < MAX_BTNS - 1) startP = Math.max(1, endP - MAX_BTNS + 1);
+
+  let html = `<button class="npg-btn" onclick="naverGoPage(${page - 1})" ${page === 1 ? 'disabled' : ''}>‹</button>`;
+  if (startP > 1) html += `<button class="npg-btn" onclick="naverGoPage(1)">1</button>${startP > 2 ? '<span class="npg-ellipsis">…</span>' : ''}`;
+  for (let p = startP; p <= endP; p++) {
+    html += `<button class="npg-btn${p === page ? ' active' : ''}" onclick="naverGoPage(${p})">${p}</button>`;
+  }
+  if (endP < totalPages) html += `${endP < totalPages - 1 ? '<span class="npg-ellipsis">…</span>' : ''}<button class="npg-btn" onclick="naverGoPage(${totalPages})">${totalPages}</button>`;
+  html += `<button class="npg-btn" onclick="naverGoPage(${page + 1})" ${page === totalPages ? 'disabled' : ''}>›</button>`;
+  html += `<span class="npg-info">${(page - 1) * size + 1}–${Math.min(page * size, total)} / ${total}건</span>`;
+  el.innerHTML = html;
+}
+
+function naverGoPage(p) {
+  const totalPages = Math.ceil(window._naverFiltered.length / window._naverPageSize) || 1;
+  window._naverPage = Math.max(1, Math.min(p, totalPages));
+  _renderNaverPage();
+  // 표 상단으로 스크롤
+  const wrap = document.querySelector('.naver-result-section .auction-table-wrap');
+  if (wrap) wrap.scrollTop = 0;
+}
+
+function naverSetPageSize() {
+  const sel = document.getElementById('naver-page-size');
+  if (!sel) return;
+  window._naverPageSize = parseInt(sel.value, 10);
+  window._naverPage = 1;
+  _renderNaverPage();
+}
+
+/* 엑셀 다운로드 */
+function downloadNaverExcel() {
+  const data = window._naverFiltered;
+  if (!data?.length) { showToast('다운로드할 데이터가 없습니다.', 'error'); return; }
+
+  const DEAL_COLOR_LABEL = { '매매': '매매', '전세': '전세', '월세': '월세' };
+  const rows = data.map((r, i) => ({
+    '순번':      i + 1,
+    '유형':      r.dealType   || '',
+    '가격':      r.price      || '',
+    '종류':      r.houseType  || '',
+    '공급(㎡)':  r.supplyArea || '',
+    '전용(㎡)':  r.exclArea   || '',
+    '전용(평)':  r.exclPyeong || '',
+    '해당층':    r.floorCur   || '',
+    '전체층':    r.floorTotal || '',
+    '향':        r.direction  || '',
+    '년식':      r.buildAge   || '',
+    '공인중개사': r.agent      || '',
+    '확인날짜':  r.confirmDate|| '',
+    '자랑거리':  r.highlight  || '',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '호가분석');
+
+  const title = (window._naverTitle || '호가분석').replace(/[\\/:*?"<>|]/g, '_');
+  XLSX.writeFile(wb, `${title}.xlsx`);
+}
+
+/* 필터 적용 */
+function applyNaverFilter() {
+  if (!window._naverListings?.length) return;
+
+  // 1) 텍스트/셀렉트 필터
+  const textFilters = {};
+  document.querySelectorAll('#naver-filter-row .nf-inp[data-key]').forEach(el => {
+    const v = el.value.trim().toLowerCase();
+    if (v) textFilters[el.dataset.key] = v;
+  });
+
+  // 2) 범위 필터 (exclPyeong, floorCur)
+  const rangeFilters = {};
+  document.querySelectorAll('#naver-filter-row .nf-range-inp[data-range]').forEach(el => {
+    const key   = el.dataset.range;
+    const bound = el.dataset.bound;
+    const v     = el.value.trim();
+    if (v !== '' && !isNaN(parseFloat(v))) {
+      if (!rangeFilters[key]) rangeFilters[key] = {};
+      rangeFilters[key][bound] = parseFloat(v);
+    }
+  });
+
+  // 3) 종류 체크박스
+  const checkedTypes = Array.from(
+    document.querySelectorAll('#naver-type-checks input[type=checkbox]:checked')
+  ).map(cb => cb.value);
+
+  // 4) 향 체크박스
+  const checkedDirs = Array.from(
+    document.querySelectorAll('#naver-dir-checks input[type=checkbox]:checked')
+  ).map(cb => cb.value);
+
+  const filtered = window._naverListings.filter(r => {
+    // 텍스트 필터
+    for (const [key, val] of Object.entries(textFilters)) {
+      if (!(r[key] ?? '').toString().toLowerCase().includes(val)) return false;
+    }
+    // 범위 필터
+    for (const [key, bounds] of Object.entries(rangeFilters)) {
+      const v = parseFloat(r[key]);
+      if (isNaN(v)) return false;
+      if (bounds.min !== undefined && v < bounds.min) return false;
+      if (bounds.max !== undefined && v > bounds.max) return false;
+    }
+    // 종류 체크박스
+    if (checkedTypes.length > 0 && !checkedTypes.includes(r.houseType)) return false;
+    // 향 체크박스
+    if (checkedDirs.length > 0 && !checkedDirs.includes(r.direction)) return false;
+    return true;
+  });
+
+  // 5) 가격 정렬
+  const sortPrice = (document.getElementById('naver-sort-price')?.value) || '';
+  if (sortPrice) {
+    const toNum = s => {
+      if (!s) return 0;
+      s = s.replace(/,/g, '');
+      let total = 0;
+      const eokM = s.match(/([\d.]+)억/);
+      if (eokM) {
+        total += parseFloat(eokM[1]) * 100000000;
+        const rest = s.slice(s.indexOf('억') + 1).match(/([\d.]+)/);
+        if (rest) total += parseFloat(rest[1]) * 10000;
+      } else {
+        const manM = s.match(/([\d.]+)만/);
+        if (manM) total += parseFloat(manM[1]) * 10000;
+        else total = parseFloat(s.replace(/[^0-9.]/g, '')) || 0;
+      }
+      return total;
+    };
+    filtered.sort((a, b) => sortPrice === 'asc'
+      ? toNum(a.price) - toNum(b.price)
+      : toNum(b.price) - toNum(a.price)
+    );
+  }
+
+  renderNaverRows(filtered);
+  updateTypeSummary();
+  updateDirSummary();
+
+  const total = window._naverListings.length;
+  const badge = document.getElementById('naver-count-badge');
+  if (badge) badge.textContent = filtered.length < total
+    ? `${filtered.length}/${total}건` : `${total}건`;
+}
+
+function updateTypeSummary() {
+  const summary = document.getElementById('naver-type-summary');
+  if (!summary) return;
+  const checked = Array.from(
+    document.querySelectorAll('#naver-type-checks input:checked')
+  ).map(cb => cb.value);
+  summary.textContent = checked.length ? checked.join('·') : '전체';
+}
+
+function updateDirSummary() {
+  const summary = document.getElementById('naver-dir-summary');
+  if (!summary) return;
+  const checked = Array.from(
+    document.querySelectorAll('#naver-dir-checks input:checked')
+  ).map(cb => cb.value.replace('향', ''));
+  summary.textContent = checked.length ? checked.join('·') : '전체';
+}
+
+function clearNaverFilters() {
+  document.querySelectorAll('#naver-filter-row input:not([type=checkbox]), #naver-filter-row select').forEach(el => {
+    el.value = '';
+  });
+  document.querySelectorAll('#naver-type-checks input[type=checkbox], #naver-dir-checks input[type=checkbox]').forEach(cb => { cb.checked = false; });
+  updateTypeSummary();
+  updateDirSummary();
 }
 
 function analyzeNaver() {
@@ -2101,37 +2388,530 @@ function analyzeNaver() {
 
   const listings = parseNaverText(text);
   if (!listings.length) {
-    showToast('매물을 파싱할 수 없습니다. 10줄 형식을 확인하세요.', 'error');
+    showToast('매물을 파싱할 수 없습니다. 형식을 확인하세요.', 'error');
     return;
   }
 
-  const gu   = (document.getElementById('naver-gu').value || '').trim();
+  const si   = (document.getElementById('naver-si').value   || '').trim();
+  const gu   = (document.getElementById('naver-gu').value   || '').trim();
   const dong = (document.getElementById('naver-dong').value || '').trim();
-  const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
-  const loc   = [gu, dong].filter(Boolean).join(' ');
-  document.getElementById('naver-result-title').textContent =
-    `${today} ${loc} 빌라 호가 분석 (${listings.length}건)`;
+  const _d = new Date();
+  const today = `${_d.getFullYear()}.${String(_d.getMonth()+1).padStart(2,'0')}.${String(_d.getDate()).padStart(2,'0')}`;
+  const loc   = [si, gu, dong].filter(Boolean).join(' ');
+  const title = `${today} ${loc ? loc + `(${listings.length}) ` : `(${listings.length}) `}호가분석`;
 
-  const tbody = document.getElementById('naver-tbody');
-  tbody.innerHTML = listings.map((r, i) => `
-    <tr>
-      <td class="col-seq">${i + 1}</td>
-      <td class="col-type">${esc(r.houseType)}</td>
-      <td class="col-price" style="font-weight:600">${esc(r.price)}</td>
-      <td style="font-size:12px">${esc(r.area)}</td>
-      <td class="col-floor">${esc(r.floorCur)}</td>
-      <td class="col-floor">${esc(r.floorTotal)}</td>
-      <td style="width:52px;text-align:center">${esc(r.direction)}</td>
-      <td style="width:60px;text-align:center">${esc(r.buildAge)}</td>
-      <td style="width:140px;font-size:12px">${esc(r.agent)}</td>
-      <td class="col-notes">${esc(r.highlight)}</td>
-    </tr>
-  `).join('');
+  window._naverListings  = listings;
+  window._naverTitle     = title;
 
-  document.getElementById('naver-result-section').style.display = '';
+  /* 게시판 자동 저장 */
+  const analyses = _getNaverAnalyses();
+  const id = Date.now().toString();
+  analyses.unshift({ id, title, listings });
+  _setNaverAnalyses(analyses);
+  window._naverActiveId = null; // 게시판 뷰로 이동하므로 선택 없음
+
+  /* 게시판 뷰로 전환 */
+  showNaverBoard();
+  showToast('분석 결과가 저장되었습니다.');
 }
 
 function clearNaverInput() {
   document.getElementById('naver-paste-area').value = '';
+  document.getElementById('naver-count-badge').textContent = '';
+  window._naverListings = null;
+  window._naverTitle    = null;
+  window._naverActiveId = null;
+  clearNaverFilters();
+  showNaverBoard();
+}
+
+/* ── 네이버 분석 저장/불러오기 (localStorage) ── */
+
+function _getNaverAnalyses() {
+  try { return JSON.parse(localStorage.getItem('naver_analyses') || '[]'); } catch { return []; }
+}
+function _setNaverAnalyses(arr) {
+  localStorage.setItem('naver_analyses', JSON.stringify(arr));
+}
+
+function loadNaverAnalysis(id) {
+  const item = _getNaverAnalyses().find(a => a.id === id);
+  if (!item) return;
+  window._naverListings  = item.listings;
+  window._naverTitle     = item.title;
+  window._naverActiveId  = id;
+  document.getElementById('naver-result-title').textContent = item.title;
+  document.getElementById('naver-count-badge').textContent  = item.listings.length + '건';
+  clearNaverFilters();
+  renderNaverRows(item.listings);
+  // 게시판 숨기고 표 표시
+  document.getElementById('naver-board-view').style.display  = 'none';
+  document.getElementById('naver-result-section').style.display = 'flex';
+  const emptyState = document.getElementById('naver-empty-state');
+  if (emptyState) emptyState.style.display = 'none';
+  switchView('naver');
+}
+
+function deleteAllNaverAnalyses() {
+  if (!confirm('저장된 분석을 모두 삭제하시겠습니까?')) return;
+  _setNaverAnalyses([]);
+  window._naverActiveId = null;
   document.getElementById('naver-result-section').style.display = 'none';
+  showNaverBoard();
+  showToast('전체 삭제되었습니다.');
+}
+
+function deleteNaverAnalysis(id, e) {
+  e.stopPropagation();
+  if (!confirm('이 분석을 삭제하시겠습니까?')) return;
+  _setNaverAnalyses(_getNaverAnalyses().filter(a => a.id !== id));
+  if (window._naverActiveId === id) {
+    window._naverActiveId = null;
+    document.getElementById('naver-result-section').style.display = 'none';
+    showNaverBoard();
+  } else {
+    renderNaverBoard();
+  }
+  showToast('삭제되었습니다.');
+}
+
+/* 게시판 뷰로 전환 (우측) */
+function showNaverBoard() {
+  document.getElementById('naver-result-section').style.display = 'none';
+  document.getElementById('naver-empty-state').style.display    = 'none';
+  document.getElementById('naver-board-view').style.display = 'block';
+  document.getElementById('naver-count-badge').textContent      = '';
+  renderNaverBoard();
+}
+
+/* 게시판 목록 렌더링 */
+function renderNaverBoard() {
+  const list   = document.getElementById('naver-board-list');
+  const empty  = document.getElementById('naver-board-empty');
+  if (!list) return;
+  const analyses = _getNaverAnalyses();
+  const delAllBtn = document.getElementById('naver-delete-all-btn');
+  if (!analyses.length) {
+    list.innerHTML = '';
+    if (empty) empty.style.display = '';
+    if (delAllBtn) delAllBtn.style.display = 'none';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  if (delAllBtn) delAllBtn.style.display = '';
+  list.innerHTML = analyses.map(a => {
+    return `<div class="naver-board-item" onclick="loadNaverAnalysis('${a.id}')">
+      <div class="naver-board-title-row">
+        <span class="naver-board-title">${esc(a.title)}</span>
+        <button class="naver-history-del" onclick="deleteNaverAnalysis('${a.id}', event)" title="삭제">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* 하위 호환 - 사이드바 히스토리가 있던 시절 */
+function renderNaverHistory() { renderNaverBoard(); }
+
+/* ═══════════════════════════════════════════════════════
+   수익률 분석
+═══════════════════════════════════════════════════════ */
+
+let profitItem    = null;
+let profitType    = '개인';
+let profitSaved   = {};  // { '개인': {...}, '개인매매사업자': {...}, '법인사업자': {...} }
+
+/* 현재 주택수 저장/로드 */
+function saveHousingCount(val) {
+  localStorage.setItem('housingCount', val);
+  if (document.getElementById('profit-modal')?.style.display !== 'none' && profitItem) {
+    const info = getAcquisitionTaxInfo(profitType);
+    const rateEl = document.getElementById('pf-acq-tax-rate');
+    if (rateEl && !rateEl.dataset.manual) rateEl.value = info.rate;
+    document.getElementById('pf-acq-tax-hint').textContent = info.hint;
+    calcProfitAll();
+  }
+}
+
+/* 취득세 정보 계산 */
+function getAcquisitionTaxInfo(buyerType) {
+  const housing      = parseInt(document.getElementById('header-housing-count')?.value || '0', 10);
+  const itemType     = profitItem?.item_type || '';
+  const officialWon  = (profitItem?.official_price || 0) * 10000; // 만원→원
+
+  const isHousing    = /아파트|빌라|다세대|연립|단독|다가구|주거/.test(itemType);
+  const isOfficetel  = /오피스텔/.test(itemType);
+  const isCommercial = /상가|근린|업무/.test(itemType);
+
+  if (buyerType === '법인사업자') {
+    if (isOfficetel || isCommercial) return { rate: 4.6,  hint: '비주거' };
+    if (officialWon > 0 && officialWon < 100000000) return { rate: 1.1, hint: '공시1억미만' };
+    return { rate: 12, hint: '법인주택' };
+  }
+
+  // 개인 / 개인매매사업자
+  if (isOfficetel || isCommercial) return { rate: 4.6, hint: '오피스텔/상가' };
+  if (officialWon > 0 && officialWon < 100000000) return { rate: 1.1, hint: '공시1억미만' };
+  if (housing === 0) return { rate: 1.1, hint: '0→1주택' };
+  if (housing === 1) return { rate: 1.1, hint: '1→2주택' };
+  if (housing === 2) return { rate: 8.0, hint: '2→3주택' };
+  return { rate: 12.0, hint: '3주택+' };
+}
+
+/* 누진세율 계산 (과표: 만원 단위) */
+function calcProgressiveTax(base) {
+  if (base <= 0) return 0;
+  const brackets = [
+    [1200,    0.06,    0],
+    [4600,    0.15,  108],
+    [8800,    0.24,  522],
+    [15000,   0.35, 1490],
+    [30000,   0.38, 1940],
+    [50000,   0.40, 2540],
+    [100000,  0.42, 3540],
+    [Infinity,0.45, 6540],
+  ];
+  for (const [limit, rate, deduct] of brackets) {
+    if (base <= limit) return Math.max(0, Math.round(base * rate - deduct));
+  }
+  return Math.max(0, Math.round(base * 0.45 - 6540));
+}
+
+/* 양도세 참고 계산 */
+function calcTransferTaxRef(winning, salePrice, acqTax, legalFee, holding) {
+  const profit = salePrice - winning - acqTax - legalFee - 250; // 기본공제 250만원
+  if (profit <= 0) return { tax: 0, hint: '차익없음' };
+
+  const itemType = profitItem?.item_type || '';
+
+  if (profitType === '법인사업자') {
+    const isHousing = /아파트|빌라|다세대|연립|단독|다가구/.test(itemType);
+    const rate = isHousing ? 0.30 : 0.10;
+    return { tax: Math.round(profit * rate), hint: `${rate * 100}%` };
+  }
+
+  const holdingMo = holding || 0;
+  if (holdingMo < 12) return { tax: Math.round(profit * 0.50), hint: '50%(1년미만)' };
+  if (holdingMo < 24) return { tax: Math.round(profit * 0.40), hint: '40%(2년미만)' };
+  const taxBase = Math.max(0, profit - 250);
+  return { tax: calcProgressiveTax(taxBase), hint: '누진세율(2년+)' };
+}
+
+/* 수익률 분석 모달 열기 */
+async function openProfitModal(myAuctionId) {
+  profitItem = myAuctionData.find(r => r.id === myAuctionId) ||
+               myAuctionFiltered.find(r => r.id === myAuctionId);
+  if (!profitItem) return;
+
+  document.getElementById('profit-modal').style.display = '';
+  fillProfitItemInfo(profitItem);
+
+  // 저장된 분석 로드
+  try {
+    const analyses = await fetch(`/api/profit-analysis/${myAuctionId}`).then(r => r.json());
+    profitSaved = {};
+    if (Array.isArray(analyses)) analyses.forEach(a => { profitSaved[a.buyer_type] = a; });
+  } catch (_) { profitSaved = {}; }
+
+  // 첫 탭으로 전환
+  switchProfitTab('개인');
+}
+
+/* 모달 닫기 */
+function closeProfitModal() {
+  document.getElementById('profit-modal').style.display = 'none';
+  profitItem  = null;
+  profitSaved = {};
+}
+
+/* 탭 전환 */
+function switchProfitTab(type) {
+  profitType = type;
+  document.querySelectorAll('.profit-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.type === type);
+  });
+
+  const saved = profitSaved[type];
+  if (saved) {
+    loadProfitFields(saved);
+  } else {
+    resetProfitFields();
+    autoFillProfitFromItem();
+  }
+  calcProfitAll();
+  document.getElementById('profit-save-status').textContent =
+    saved ? `마지막 저장: ${(saved.updated_at || '').slice(0, 16).replace('T', ' ')}` : '';
+}
+
+/* 물건 정보 표시 */
+function fillProfitItemInfo(item) {
+  document.getElementById('pi-item-type').textContent    = item.item_type || '-';
+  document.getElementById('pi-address').textContent      = item.address || '-';
+  document.getElementById('pi-appraisal').textContent    = item.appraisal_price != null ? fmtAmt(item.appraisal_price) + '만원' : '-';
+  document.getElementById('pi-min-price').textContent    = item.min_price != null ? fmtAmt(item.min_price) + '만원' : '-';
+  document.getElementById('pi-official').textContent     = item.official_price != null ? fmtAmt(item.official_price) + '만원' : '-';
+  const pyeong = item.building_area;
+  document.getElementById('pi-building-area').textContent = pyeong != null
+    ? `${pyeong}평 (${(pyeong * 3.3058).toFixed(1)}㎡)` : '-';
+  document.getElementById('profit-modal-item-name').textContent =
+    item.case_no ? ` — ${item.case_no}` : '';
+}
+
+/* 저장된 값 폼에 로드 */
+function loadProfitFields(saved) {
+  const map = {
+    'pf-winning':      'winning_price',
+    'pf-acq-tax-rate': 'acq_tax_rate',
+    'pf-other-cost':   'other_cost',
+    'pf-loan':         'loan_amount',
+    'pf-loan-rate':    'loan_rate',
+    'pf-holding':      'holding_months',
+    'pf-sale-price':   'sale_price',
+    'pf-transfer-tax': 'transfer_tax',
+  };
+  Object.entries(map).forEach(([elId, key]) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.value = saved[key] != null ? saved[key] : '';
+    el.removeAttribute('data-manual');
+  });
+  const rateEl = document.getElementById('pf-acq-tax-rate');
+  if (rateEl && saved.acq_tax_rate != null) rateEl.dataset.manual = '1';
+
+  // 감정가대비 재계산
+  const winning   = parseFloat(document.getElementById('pf-winning').value) || 0;
+  const appraisal = profitItem?.appraisal_price || 0;
+  if (appraisal > 0 && winning > 0)
+    document.getElementById('pf-appraisal-ratio').value = (winning / appraisal * 100).toFixed(1);
+  updateTransferHint();
+}
+
+/* 폼 초기화 */
+function resetProfitFields() {
+  ['pf-winning','pf-appraisal-ratio','pf-other-cost',
+   'pf-loan','pf-loan-rate','pf-holding',
+   'pf-sale-price','pf-transfer-tax'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = ''; el.removeAttribute('data-manual'); }
+  });
+}
+
+/* 물건 데이터 자동 채우기 */
+function autoFillProfitFromItem() {
+  if (!profitItem) return;
+  const minPrice  = profitItem.min_price  || 0;
+  const appraisal = profitItem.appraisal_price || 0;
+  document.getElementById('pf-winning').value = minPrice || '';
+  if (appraisal > 0 && minPrice > 0)
+    document.getElementById('pf-appraisal-ratio').value = (minPrice / appraisal * 100).toFixed(1);
+  const taxInfo = getAcquisitionTaxInfo(profitType);
+  document.getElementById('pf-acq-tax-rate').value = taxInfo.rate;
+  document.getElementById('pf-acq-tax-hint').textContent = taxInfo.hint;
+  updateTransferHint();
+}
+
+/* 낙찰가 입력 → 감정가대비% 업데이트 */
+function onProfitWinningChange() {
+  const winning   = parseFloat(document.getElementById('pf-winning').value) || 0;
+  const appraisal = profitItem?.appraisal_price || 0;
+  if (appraisal > 0)
+    document.getElementById('pf-appraisal-ratio').value = (winning / appraisal * 100).toFixed(1);
+  calcProfitAll();
+}
+
+/* 감정가대비% 입력 → 낙찰가 업데이트 */
+function onProfitRatioChange() {
+  const ratio     = parseFloat(document.getElementById('pf-appraisal-ratio').value) || 0;
+  const appraisal = profitItem?.appraisal_price || 0;
+  if (appraisal > 0)
+    document.getElementById('pf-winning').value = Math.round(appraisal * ratio / 100);
+  calcProfitAll();
+}
+
+/* 전체 계산 */
+function calcProfitAll() {
+  if (!profitItem) return;
+  const g = id => parseFloat(document.getElementById(id)?.value || '0') || 0;
+
+  const winning       = g('pf-winning');
+  const taxRate       = g('pf-acq-tax-rate');
+  const otherCost     = g('pf-other-cost');
+  const loan          = g('pf-loan');
+  const loanRate      = g('pf-loan-rate');
+  const holding       = g('pf-holding');
+  const salePrice     = g('pf-sale-price');
+  const transferTax   = g('pf-transfer-tax');
+  const minPrice      = profitItem.min_price      || 0;
+  const pyeong        = profitItem.building_area  || 0;
+  const sqm           = pyeong * 3.3058;
+
+  // 취득세
+  const acqTax    = Math.round(winning * taxRate / 100);
+  setVal('pf-acq-tax', acqTax);
+
+  // 입찰보증금 = 최저가 × 10%
+  const deposit   = Math.round(minPrice * 0.1);
+  setVal('pf-deposit', deposit);
+
+  // 납부잔금 = 낙찰가 - 입찰보증금
+  setVal('pf-remaining', Math.max(0, winning - deposit));
+
+  // 법무사비 = 낙찰가 × 0.5%
+  const legalFee  = Math.round(winning * 0.005);
+  setVal('pf-legal-fee', legalFee);
+
+  // 명도비 = ㎡ × 1.5만원
+  const eviction  = Math.round(sqm * 1.5);
+  setVal('pf-eviction', eviction);
+
+  // 인테리어비 = 평 × 20만원
+  const interior  = Math.round(pyeong * 20);
+  setVal('pf-interior', interior);
+
+  // 취득 총비용
+  const totalCost = winning + acqTax + legalFee + eviction + interior + otherCost;
+  const totalCostEl = document.getElementById('pf-total-cost');
+  if (totalCostEl) totalCostEl.textContent = fmtAmt(Math.round(totalCost)) + ' 만원';
+
+  // 대출 이자
+  const monthlyInt = Math.round(loan * loanRate / 100 / 12);
+  const totalInt   = Math.round(monthlyInt * holding);
+  setVal('pf-monthly-int', monthlyInt);
+  setVal('pf-total-int', totalInt);
+
+  // 중개수수료 = 매도금액 × 0.4%
+  const brokerage = Math.round(salePrice * 0.004);
+  setVal('pf-brokerage', brokerage);
+
+  // 양도세 참고값
+  updateTransferHint(winning, salePrice, acqTax, legalFee, holding);
+
+  // 최저가대비
+  const minRatioEl = document.getElementById('pf-min-ratio');
+  if (minRatioEl) {
+    minRatioEl.textContent = minPrice > 0 ? (winning / minPrice * 100).toFixed(1) + '%' : '-';
+  }
+
+  // 총투자금 = 자기자본 = 낙찰가 - 대출금 + 취득세 + 법무사비 + 명도비 + 인테리어비 + 기타비용
+  const totalInvest = Math.max(0, winning - loan + acqTax + legalFee + eviction + interior + otherCost);
+
+  // 순수익
+  const netProfit = salePrice - winning - acqTax - legalFee - eviction - interior - otherCost - totalInt - brokerage - transferTax;
+
+  // 수익률
+  const profitRate = totalInvest > 0 ? (netProfit / totalInvest * 100) : 0;
+
+  const investEl  = document.getElementById('pf-total-invest');
+  const profitEl  = document.getElementById('pf-net-profit');
+  const rateEl    = document.getElementById('pf-profit-rate');
+  if (investEl) investEl.textContent = fmtAmt(Math.round(totalInvest)) + ' 만원';
+  if (profitEl) {
+    profitEl.textContent  = (netProfit >= 0 ? '+' : '') + fmtAmt(Math.round(netProfit)) + ' 만원';
+    profitEl.className    = 'profit-result-val profit-result-main ' + (netProfit >= 0 ? 'profit-pos' : 'profit-neg');
+  }
+  if (rateEl) {
+    rateEl.textContent = profitRate.toFixed(1) + '%';
+    rateEl.className   = 'profit-result-val profit-result-main ' + (profitRate >= 0 ? 'profit-pos' : 'profit-neg');
+  }
+}
+
+/* 양도세 참고 힌트 업데이트 */
+function updateTransferHint(winning, salePrice, acqTax, legalFee, holding) {
+  const hintEl = document.getElementById('pf-transfer-hint');
+  if (!hintEl) return;
+  if (winning == null) {
+    winning   = parseFloat(document.getElementById('pf-winning')?.value || '0') || 0;
+    salePrice = parseFloat(document.getElementById('pf-sale-price')?.value || '0') || 0;
+    acqTax    = parseFloat(document.getElementById('pf-acq-tax')?.value || '0') || 0;
+    legalFee  = parseFloat(document.getElementById('pf-legal-fee')?.value || '0') || 0;
+    holding   = parseFloat(document.getElementById('pf-holding')?.value || '0') || 0;
+  }
+  const ref = calcTransferTaxRef(winning, salePrice, acqTax, legalFee, holding);
+  hintEl.textContent = ref.hint === '차익없음'
+    ? '차익없음' : `참고: ~${fmtAmt(ref.tax)}만(${ref.hint})`;
+}
+
+/* 취득세율 수동 변경 */
+document.addEventListener('input', e => {
+  if (e.target.id === 'pf-acq-tax-rate') e.target.dataset.manual = '1';
+});
+
+/* setVal 헬퍼 */
+function setVal(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.value = val != null && !isNaN(val) ? Math.round(val) : '';
+}
+
+/* 수익률 분석 저장 */
+async function saveProfitAnalysis() {
+  if (!profitItem) return;
+  const g = id => {
+    const v = parseFloat(document.getElementById(id)?.value || '');
+    return isNaN(v) ? null : v;
+  };
+
+  const winning     = g('pf-winning')    || 0;
+  const acqTaxRate  = g('pf-acq-tax-rate') || 0;
+  const acqTax      = g('pf-acq-tax')   || 0;
+  const deposit     = g('pf-deposit')   || 0;
+  const remaining   = g('pf-remaining') || 0;
+  const legalFee    = g('pf-legal-fee') || 0;
+  const eviction    = g('pf-eviction')  || 0;
+  const interior    = g('pf-interior')  || 0;
+  const otherCost   = g('pf-other-cost') ?? 0;
+  const loan        = g('pf-loan')      ?? 0;
+  const loanRate    = g('pf-loan-rate') ?? 0;
+  const holding     = g('pf-holding')   ?? 0;
+  const monthlyInt  = g('pf-monthly-int') || 0;
+  const totalInt    = g('pf-total-int')   || 0;
+  const salePrice   = g('pf-sale-price') || 0;
+  const brokerage   = g('pf-brokerage')  || 0;
+  const transferTax = g('pf-transfer-tax') ?? 0;
+
+  const totalInvest = Math.max(0, winning - loan + acqTax + legalFee + eviction + interior + otherCost);
+  const netProfit   = salePrice - winning - acqTax - legalFee - eviction - interior - otherCost - totalInt - brokerage - transferTax;
+  const profitRate  = totalInvest > 0 ? parseFloat((netProfit / totalInvest * 100).toFixed(2)) : null;
+
+  const payload = {
+    my_auction_id: profitItem.id,
+    buyer_type:    profitType,
+    winning_price: winning,
+    acq_tax_rate:  acqTaxRate,
+    acq_tax:       acqTax,
+    bid_deposit:   deposit,
+    remaining,
+    legal_fee:     legalFee,
+    eviction_cost: eviction,
+    interior_cost: interior,
+    other_cost:    otherCost,
+    loan_amount:   loan,
+    loan_rate:     loanRate,
+    holding_months: holding,
+    monthly_int:   monthlyInt,
+    total_int:     totalInt,
+    sale_price:    salePrice,
+    brokerage_fee: brokerage,
+    transfer_tax:  transferTax,
+    total_invest:  Math.round(totalInvest),
+    net_profit:    Math.round(netProfit),
+    profit_rate:   profitRate,
+  };
+
+  const statusEl = document.getElementById('profit-save-status');
+  if (statusEl) statusEl.textContent = '저장 중...';
+  try {
+    const res = await fetch('/api/profit-analysis', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error((await res.json()).error || '저장 실패');
+    const result = await res.json();
+    profitSaved[profitType] = { ...payload, id: result.id, updated_at: new Date().toISOString() };
+    const now = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    if (statusEl) statusEl.textContent = `저장됨 ${now}`;
+    showToast('수익률 분석이 저장되었습니다.');
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '';
+    showToast('저장 실패: ' + e.message, 'error');
+  }
 }

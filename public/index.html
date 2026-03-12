@@ -19,6 +19,15 @@
         <span>MJiH's home</span>
       </div>
       <span id="header-user" class="header-user"></span>
+      <div class="header-housing-wrap">
+        <span class="header-housing-label">현재주택</span>
+        <select id="header-housing-count" class="header-housing-sel" onchange="saveHousingCount(this.value)">
+          <option value="0">0주택</option>
+          <option value="1">1주택</option>
+          <option value="2">2주택</option>
+          <option value="3">3주택+</option>
+        </select>
+      </div>
       <button class="btn-icon-only" id="settings-btn" title="API 키 설정" onclick="openSettings()">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -190,25 +199,40 @@
           </span>
         </div>
         <div class="form-sections">
+
           <div class="form-section form-section--region">
             <div class="form-section-header">지역</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
-              <div class="form-group">
-                <label>구</label>
-                <input type="text" id="naver-gu" placeholder="예: 팔달구" />
+            <div class="naver-loc-row">
+              <div class="naver-loc-group">
+                <label class="naver-loc-label">시</label>
+                <input class="naver-loc-input" type="text" id="naver-si" placeholder="서울시" />
               </div>
-              <div class="form-group">
-                <label>동</label>
-                <input type="text" id="naver-dong" placeholder="예: 매산동" />
+              <div class="naver-loc-group">
+                <label class="naver-loc-label">구</label>
+                <input class="naver-loc-input" type="text" id="naver-gu" placeholder="송파구" />
+              </div>
+              <div class="naver-loc-group">
+                <label class="naver-loc-label">동</label>
+                <input class="naver-loc-input" type="text" id="naver-dong" placeholder="잠실동" />
               </div>
             </div>
           </div>
+
+          <div class="form-section">
+            <div class="form-section-header">호가 텍스트</div>
+            <div class="form-group">
+              <textarea id="naver-paste-area" class="naver-textarea"
+                placeholder="네이버부동산 앱에서 매물을 복사하여 붙여넣으세요."></textarea>
+            </div>
+          </div>
+
           <button class="btn btn-primary btn-search-submit" onclick="analyzeNaver()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
             분석하기
           </button>
+
         </div>
       </div>
 
@@ -674,11 +698,12 @@
                 <th class="col-addr">주소</th>
                 <th class="col-notes editable-col">체크사항<br><small>수정가능</small></th>
                 <th class="col-date">저장일</th>
+                <th class="col-action">수익률<br>분석</th>
                 <th class="col-del"></th>
               </tr>
             </thead>
             <tbody id="my-auction-tbody">
-              <tr><td colspan="21" class="auction-empty">저장된 데이터가 없습니다.</td></tr>
+              <tr><td colspan="22" class="auction-empty">저장된 데이터가 없습니다.</td></tr>
             </tbody>
           </table>
         </div>
@@ -694,40 +719,149 @@
               <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
             <h2 style="margin:0;font-size:16px;font-weight:700">네이버부동산 호가보기</h2>
+            <span class="badge" id="naver-count-badge" style="margin-left:4px"></span>
           </div>
           <div class="auction-header-actions">
+            <button class="btn btn-danger btn-sm" onclick="deleteAllNaverAnalyses()" id="naver-delete-all-btn" style="display:none">전체삭제</button>
             <button class="btn btn-outline btn-sm" onclick="clearNaverInput()">초기화</button>
           </div>
         </div>
 
-        <div class="naver-paste-section">
-          <label class="naver-paste-label">호가 텍스트 붙여넣기</label>
-          <textarea id="naver-paste-area" class="naver-textarea"
-            placeholder="네이버부동산 앱에서 매물 정보를 복사하여 붙여넣으세요. (10줄 = 매물 1개)"></textarea>
+        <!-- 게시판 뷰 -->
+        <div id="naver-board-view" style="display:none; padding: 12px 16px; flex:1; overflow-y:auto; min-height:0">
+          <div id="naver-board-list"></div>
+          <div id="naver-board-empty" class="empty-state" style="display:none">
+            <p style="color:var(--text-muted);font-size:14px">저장된 분석이 없습니다.</p>
+          </div>
         </div>
 
-        <div id="naver-result-section" style="display:none; padding: 0 16px 16px">
-          <h3 id="naver-result-title" class="naver-result-title"></h3>
-          <div class="auction-table-wrap" style="max-height:none">
+        <!-- 표 뷰 -->
+        <div id="naver-result-section" class="naver-result-section">
+          <div class="naver-table-toolbar">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0">
+              <button class="btn btn-outline btn-sm" onclick="showNaverBoard()" style="padding:4px 10px;font-size:12px;flex-shrink:0">
+                ← 목록
+              </button>
+              <h3 id="naver-result-title" class="naver-result-title" style="margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></h3>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+              <label style="font-size:12px;color:var(--text-muted);white-space:nowrap">페이지당</label>
+              <select id="naver-page-size" class="nf-inp" style="width:70px" onchange="naverSetPageSize()">
+                <option value="100">100</option>
+                <option value="300">300</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+                <option value="3000">3000</option>
+                <option value="5000">5000</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="downloadNaverExcel()" title="엑셀 다운로드" style="padding:4px 10px;font-size:12px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="vertical-align:middle">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                엑셀
+              </button>
+            </div>
+          </div>
+          <!-- 페이지네이션 (상단) -->
+          <div id="naver-pagination" class="naver-pagination"></div>
+          <div class="auction-table-wrap">
             <table class="auction-table">
               <thead>
                 <tr>
                   <th class="col-seq">순번</th>
-                  <th class="col-type">주거종류</th>
+                  <th style="width:44px;text-align:center">유형</th>
                   <th class="col-price">가격</th>
-                  <th style="width:140px">평수(공급/전용)</th>
-                  <th class="col-floor">해당층</th>
+                  <th style="width:72px;text-align:center">종류</th>
+                  <th style="width:60px;text-align:center">공급<br><small style="font-weight:400">㎡</small></th>
+                  <th style="width:60px;text-align:center">전용<br><small style="font-weight:400">㎡</small></th>
+                  <th style="width:104px;text-align:center">전용 평</th>
+                  <th style="width:100px;text-align:center">해당층</th>
                   <th class="col-floor">전체층</th>
-                  <th style="width:52px;text-align:center">향</th>
-                  <th style="width:60px;text-align:center">년식</th>
-                  <th style="width:140px">공인중개사</th>
+                  <th style="width:72px;text-align:center">향</th>
+                  <th style="width:65px;text-align:center">년식</th>
+                  <th style="width:130px">공인중개사</th>
+                  <th style="width:78px;text-align:center">날짜</th>
                   <th class="col-notes">자랑거리</th>
                 </tr>
+                <tr id="naver-filter-row" class="naver-filter-row">
+                  <th></th>
+                  <th><select class="nf-inp" data-key="dealType" onchange="applyNaverFilter()">
+                    <option value="">전체</option>
+                    <option value="매매">매매</option>
+                    <option value="전세">전세</option>
+                    <option value="월세">월세</option>
+                  </select></th>
+                  <th><select class="nf-inp" id="naver-sort-price" onchange="applyNaverFilter()">
+                    <option value="">정렬</option>
+                    <option value="asc">낮은순</option>
+                    <option value="desc">높은순</option>
+                  </select></th>
+                  <th>
+                    <details class="nf-dir-wrap" id="naver-type-details">
+                      <summary class="nf-dir-btn" id="naver-type-summary">전체</summary>
+                      <div class="nf-dir-panel" id="naver-type-checks">
+                        <label><input type="checkbox" value="다세대"  onchange="applyNaverFilter()"> 다세대</label>
+                        <label><input type="checkbox" value="빌라"    onchange="applyNaverFilter()"> 빌라</label>
+                        <label><input type="checkbox" value="연립"    onchange="applyNaverFilter()"> 연립</label>
+                        <label><input type="checkbox" value="아파트"  onchange="applyNaverFilter()"> 아파트</label>
+                        <label><input type="checkbox" value="오피스텔" onchange="applyNaverFilter()"> 오피스텔</label>
+                        <label><input type="checkbox" value="단독"    onchange="applyNaverFilter()"> 단독</label>
+                      </div>
+                    </details>
+                  </th>
+                  <th><input class="nf-inp" data-key="supplyArea" placeholder="공급" oninput="applyNaverFilter()"></th>
+                  <th><input class="nf-inp" data-key="exclArea" placeholder="전용㎡" oninput="applyNaverFilter()"></th>
+                  <th>
+                    <div class="nf-range">
+                      <input class="nf-range-inp" data-range="exclPyeong" data-bound="min" placeholder="최소" oninput="applyNaverFilter()">
+                      <span class="nf-range-sep">~</span>
+                      <input class="nf-range-inp" data-range="exclPyeong" data-bound="max" placeholder="최대" oninput="applyNaverFilter()">
+                    </div>
+                  </th>
+                  <th>
+                    <div class="nf-range">
+                      <input class="nf-range-inp" data-range="floorCur" data-bound="min" placeholder="최소" oninput="applyNaverFilter()">
+                      <span class="nf-range-sep">~</span>
+                      <input class="nf-range-inp" data-range="floorCur" data-bound="max" placeholder="최대" oninput="applyNaverFilter()">
+                    </div>
+                  </th>
+                  <th><input class="nf-inp" data-key="floorTotal" placeholder="층" oninput="applyNaverFilter()"></th>
+                  <th>
+                    <details class="nf-dir-wrap" id="naver-dir-details">
+                      <summary class="nf-dir-btn" id="naver-dir-summary">전체</summary>
+                      <div class="nf-dir-panel" id="naver-dir-checks">
+                        <label><input type="checkbox" value="남향"   onchange="applyNaverFilter()"> 남향</label>
+                        <label><input type="checkbox" value="남동향" onchange="applyNaverFilter()"> 남동향</label>
+                        <label><input type="checkbox" value="남서향" onchange="applyNaverFilter()"> 남서향</label>
+                        <label><input type="checkbox" value="동향"   onchange="applyNaverFilter()"> 동향</label>
+                        <label><input type="checkbox" value="서향"   onchange="applyNaverFilter()"> 서향</label>
+                        <label><input type="checkbox" value="북향"   onchange="applyNaverFilter()"> 북향</label>
+                        <label><input type="checkbox" value="북동향" onchange="applyNaverFilter()"> 북동향</label>
+                        <label><input type="checkbox" value="북서향" onchange="applyNaverFilter()"> 북서향</label>
+                      </div>
+                    </details>
+                  </th>
+                  <th><input class="nf-inp" data-key="buildAge" placeholder="년식" oninput="applyNaverFilter()"></th>
+                  <th><input class="nf-inp" data-key="agent" placeholder="중개사" oninput="applyNaverFilter()"></th>
+                  <th><input class="nf-inp" data-key="confirmDate" placeholder="날짜" oninput="applyNaverFilter()"></th>
+                  <th><input class="nf-inp" data-key="highlight" placeholder="키워드" oninput="applyNaverFilter()"></th>
+                </tr>
               </thead>
-              <tbody id="naver-tbody"></tbody>
+              <tbody id="naver-tbody">
+              </tbody>
             </table>
           </div>
         </div>
+
+        <!-- 초기 안내 -->
+        <div id="naver-empty-state" class="empty-state">
+          <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <p>좌측 사이드바에서 호가 텍스트를 붙여넣고<br><strong>분석하기</strong>를 클릭하세요.<br><span style="font-size:13px;color:var(--text-muted)">분석 결과는 자동으로 목록에 저장됩니다.</span></p>
+        </div>
+
       </div><!-- naver-view -->
 
     </div><!-- content -->
@@ -858,6 +992,187 @@
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeSettings()">취소</button>
         <button class="btn btn-primary" onclick="saveSettings()">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 수익률 분석 모달 ── -->
+  <div id="profit-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeProfitModal()">
+    <div class="modal modal--profit">
+      <div class="profit-modal-header">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          <h3 class="modal-title" style="margin:0;white-space:nowrap">수익률 분석</h3>
+          <span id="profit-modal-item-name" class="profit-modal-subtitle"></span>
+        </div>
+        <button class="btn-modal-close" onclick="closeProfitModal()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 탭 -->
+      <div class="profit-tabs">
+        <button class="profit-tab active" data-type="개인" onclick="switchProfitTab('개인')">개인</button>
+        <button class="profit-tab" data-type="개인매매사업자" onclick="switchProfitTab('개인매매사업자')">개인매매사업자</button>
+        <button class="profit-tab" data-type="법인사업자" onclick="switchProfitTab('법인사업자')">법인사업자</button>
+      </div>
+
+      <div class="profit-modal-body">
+
+        <!-- 물건 정보 -->
+        <div class="profit-section">
+          <div class="profit-section-title">물건 정보</div>
+          <div class="profit-info-grid">
+            <div class="profit-info-item"><label>물건종류</label><span id="pi-item-type">-</span></div>
+            <div class="profit-info-item profit-info-addr"><label>주소</label><span id="pi-address">-</span></div>
+            <div class="profit-info-item"><label>감정가</label><span id="pi-appraisal">-</span></div>
+            <div class="profit-info-item"><label>최저가</label><span id="pi-min-price">-</span></div>
+            <div class="profit-info-item"><label>공시가격</label><span id="pi-official">-</span></div>
+            <div class="profit-info-item"><label>건물면적</label><span id="pi-building-area">-</span></div>
+          </div>
+        </div>
+
+        <!-- 낙찰가 설정 -->
+        <div class="profit-section">
+          <div class="profit-section-title">낙찰가 설정</div>
+          <div class="profit-row profit-row--3">
+            <div class="profit-field">
+              <label>낙찰가 (만원)</label>
+              <input type="number" id="pf-winning" class="profit-input" placeholder="0" oninput="onProfitWinningChange()">
+            </div>
+            <div class="profit-field">
+              <label>감정가대비 (%)</label>
+              <input type="number" id="pf-appraisal-ratio" class="profit-input" placeholder="0.0" step="0.1" oninput="onProfitRatioChange()">
+            </div>
+            <div class="profit-field">
+              <label>최저가대비 <small style="font-weight:400">(참고)</small></label>
+              <span id="pf-min-ratio" class="profit-ref-val">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 취득 비용 -->
+        <div class="profit-section">
+          <div class="profit-section-title">취득 비용</div>
+          <div class="profit-grid">
+            <div class="profit-field">
+              <label>취득세율 (%)<span class="profit-auto-hint" id="pf-acq-tax-hint"></span></label>
+              <input type="number" id="pf-acq-tax-rate" class="profit-input" step="0.1" oninput="calcProfitAll()">
+            </div>
+            <div class="profit-field">
+              <label>취득세 (만원)</label>
+              <input type="number" id="pf-acq-tax" class="profit-input profit-auto" readonly>
+            </div>
+            <div class="profit-field">
+              <label>입찰보증금 (만원) <span class="profit-formula">최저가×10%</span></label>
+              <input type="number" id="pf-deposit" class="profit-input profit-auto" readonly>
+            </div>
+            <div class="profit-field">
+              <label>납부잔금 (만원) <span class="profit-formula">낙찰가-보증금</span></label>
+              <input type="number" id="pf-remaining" class="profit-input profit-auto" readonly>
+            </div>
+            <div class="profit-field">
+              <label>법무사비 (만원) <span class="profit-formula">낙찰가×0.5%</span></label>
+              <input type="number" id="pf-legal-fee" class="profit-input profit-auto" readonly>
+            </div>
+            <div class="profit-field">
+              <label>명도비 (만원) <span class="profit-formula">㎡×1.5만</span></label>
+              <input type="number" id="pf-eviction" class="profit-input profit-auto" readonly>
+            </div>
+            <div class="profit-field">
+              <label>인테리어비 (만원) <span class="profit-formula">평×20만</span></label>
+              <input type="number" id="pf-interior" class="profit-input profit-auto" readonly>
+            </div>
+            <div class="profit-field">
+              <label>기타비용 (만원)</label>
+              <input type="number" id="pf-other-cost" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+            </div>
+          </div>
+          <div class="profit-subtotal">
+            <span>취득 총비용 (낙찰가+세금+제비용)</span>
+            <span id="pf-total-cost" class="profit-subtotal-val">-</span>
+          </div>
+        </div>
+
+        <!-- 대출 / 이자 -->
+        <div class="profit-section">
+          <div class="profit-section-title">대출 / 이자</div>
+          <div class="profit-row profit-row--5">
+            <div class="profit-field">
+              <label>대출금 (만원)</label>
+              <input type="number" id="pf-loan" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+            </div>
+            <div class="profit-field">
+              <label>연이율 (%)</label>
+              <input type="number" id="pf-loan-rate" class="profit-input" placeholder="3.5" step="0.1" oninput="calcProfitAll()">
+            </div>
+            <div class="profit-field">
+              <label>보유기간 (개월)</label>
+              <input type="number" id="pf-holding" class="profit-input" placeholder="12" oninput="calcProfitAll()">
+            </div>
+            <div class="profit-field">
+              <label>월이자 (만원)</label>
+              <input type="number" id="pf-monthly-int" class="profit-input profit-auto" readonly>
+            </div>
+            <div class="profit-field">
+              <label>보유이자 (만원)</label>
+              <input type="number" id="pf-total-int" class="profit-input profit-auto" readonly>
+            </div>
+          </div>
+        </div>
+
+        <!-- 매도 -->
+        <div class="profit-section">
+          <div class="profit-section-title">매도</div>
+          <div class="profit-row profit-row--3">
+            <div class="profit-field">
+              <label>매도금액 (만원)</label>
+              <input type="number" id="pf-sale-price" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+            </div>
+            <div class="profit-field">
+              <label>중개수수료 (만원) <span class="profit-formula">매도금액×0.4%</span></label>
+              <input type="number" id="pf-brokerage" class="profit-input profit-auto" readonly>
+            </div>
+            <div class="profit-field">
+              <label>양도세 (만원) <span class="profit-auto-hint" id="pf-transfer-hint"></span></label>
+              <input type="number" id="pf-transfer-tax" class="profit-input" placeholder="0" oninput="calcProfitAll()">
+            </div>
+          </div>
+        </div>
+
+        <!-- 결과 -->
+        <div class="profit-result-section">
+          <div class="profit-result-row">
+            <div class="profit-result-item">
+              <span class="profit-result-label">총투자금 <small style="font-weight:400;font-size:11px">(자기자본)</small></span>
+              <span class="profit-result-val" id="pf-total-invest">-</span>
+            </div>
+            <div class="profit-result-divider"></div>
+            <div class="profit-result-item">
+              <span class="profit-result-label">순수익</span>
+              <span class="profit-result-val profit-result-main" id="pf-net-profit">-</span>
+            </div>
+            <div class="profit-result-divider"></div>
+            <div class="profit-result-item">
+              <span class="profit-result-label">수익률</span>
+              <span class="profit-result-val profit-result-main" id="pf-profit-rate">-</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- profit-modal-body -->
+
+      <div class="profit-modal-footer">
+        <span id="profit-save-status" class="profit-save-status"></span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="closeProfitModal()">닫기</button>
+          <button class="btn btn-primary" onclick="saveProfitAnalysis()">저장</button>
+        </div>
       </div>
     </div>
   </div>

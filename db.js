@@ -276,6 +276,51 @@ async function deleteMyAuctionBatch(ids) {
   if (error) throw error;
 }
 
+/* ──────────────────────────────────────────
+   수익률 분석 CRUD
+────────────────────────────────────────── */
+async function getProfitAnalyses(myAuctionId) {
+  const { data, error } = await supabase
+    .from('profit_analysis')
+    .select('*')
+    .eq('my_auction_id', myAuctionId)
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+async function upsertProfitAnalysis(fields) {
+  const now = new Date().toISOString();
+  const { my_auction_id, buyer_type } = fields;
+  const { data: existing } = await supabase
+    .from('profit_analysis')
+    .select('id')
+    .eq('my_auction_id', my_auction_id)
+    .eq('buyer_type', buyer_type)
+    .maybeSingle();
+  if (existing) {
+    const { error } = await supabase
+      .from('profit_analysis')
+      .update({ ...fields, updated_at: now })
+      .eq('id', existing.id);
+    if (error) throw error;
+    return existing.id;
+  } else {
+    const { data, error } = await supabase
+      .from('profit_analysis')
+      .insert({ ...fields, created_at: now, updated_at: now })
+      .select('id')
+      .single();
+    if (error) throw error;
+    return data.id;
+  }
+}
+
+async function deleteProfitAnalysis(id) {
+  const { error } = await supabase.from('profit_analysis').delete().eq('id', id);
+  if (error) throw error;
+}
+
 module.exports = {
   saveSearch, saveTransactionBatch, getHistory,
   getTransactions, deleteSearch, deleteSearchBatch, deleteAllSearches,
@@ -283,4 +328,5 @@ module.exports = {
   deleteAuction, deleteAuctionBatch, deleteAllAuctions,
   getMyAuctions, addMyAuctions, updateMyAuction,
   deleteMyAuction, deleteMyAuctionBatch,
+  getProfitAnalyses, upsertProfitAnalysis, deleteProfitAnalysis,
 };
