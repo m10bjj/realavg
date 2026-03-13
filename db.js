@@ -233,7 +233,7 @@ async function getMyAuctions() {
   while (true) {
     const { data, error } = await supabase
       .from('my_auctions').select('*')
-      .order('saved_at', { ascending: false })
+      .order('id', { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
