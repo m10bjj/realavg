@@ -2796,10 +2796,20 @@ function resetProfitFields() {
 }
 
 /* ── 매도금액 ↔ 매매시세 동기화 ── */
+let _salePriceChanged = false; // 사용자가 실제로 입력했을 때만 sync
+
+function onSalePriceInput() {
+  const el = document.getElementById('pf-sale-price');
+  wonInput(el, calcProfitAll);
+  _salePriceChanged = true;
+}
+
 function onSalePriceBlur() {
   const el = document.getElementById('pf-sale-price');
   wonBlur(el);
-  if (!profitItem) return;
+  // 사용자가 직접 입력한 경우에만 매매시세 동기화
+  if (!profitItem || !_salePriceChanged) { _salePriceChanged = false; return; }
+  _salePriceChanged = false;
   const manWon = el.dataset.raw ? Math.round(parseFloat(el.dataset.raw) / 10000) : null;
   // 로컬 데이터 업데이트
   profitItem.sale_market = manWon;
@@ -2814,7 +2824,7 @@ function onSalePriceBlur() {
     body: JSON.stringify({ sale_market: manWon }),
   }).catch(() => {});
   // 테이블 셀 즉시 업데이트
-  const cell = document.querySelector(`tr[data-id="${profitItem.id}"] td[data-field="sale_market"]`);
+  const cell = document.querySelector(`#my-auction-tbody tr[data-id="${profitItem.id}"] td[data-field="sale_market"]`);
   if (cell) {
     cell.dataset.val = manWon ?? '';
     cell.innerHTML = fmtAmt(manWon);
