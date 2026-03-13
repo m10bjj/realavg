@@ -19,7 +19,7 @@ const app        = express();
 const PORT       = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'realestate-jwt-secret-2024';
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
 /* ──────────────────────────────────────────
@@ -591,65 +591,24 @@ app.get('/api/auction', async (_req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-/* POST /api/auction/upload  (multipart: field name = "file") */
-app.post('/api/auction/upload', upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: '파일이 없습니다.' });
+/* POST /api/auction/upload  – 브라우저에서 파싱된 JSON rows 수신 */
+app.post('/api/auction/upload', async (req, res) => {
+  const { rows, filename } = req.body;
+  if (!Array.isArray(rows) || !rows.length)
+    return res.status(400).json({ error: '데이터가 없습니다.' });
 
-  // multer 는 latin1 로 파일명을 받으므로 UTF-8 로 복원
-  const filename = Buffer.from(req.file.originalname || '', 'latin1').toString('utf8');
+  console.log(`[auction upload] 파일: ${filename || '?'}, 행: ${rows.length}행`);
+
+  // case_no 있는 행만 유효
+  const valid = rows.filter(r => r.case_no);
+  if (!valid.length) return res.status(400).json({ error: '유효한 데이터 행이 없습니다.' });
+
+  // 중복 case_no 제거 (마지막 행 우선)
+  const seenCaseNo = new Map();
+  valid.forEach(r => { if (r.case_no) seenCaseNo.set(r.case_no, r); });
+  const auctions = [...seenCaseNo.values()];
 
   try {
-    const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: false });
-
-    // "경매목록" 시트 우선, 없으면 첫 번째 시트
-    const sheetName = wb.SheetNames.find(n => n === '경매목록') || wb.SheetNames[0];
-    if (!sheetName) return res.status(400).json({ error: 'Excel 시트를 찾을 수 없습니다.' });
-
-    const ws  = wb.Sheets[sheetName];
-    // raw 배열로 읽기 → 앞의 제목/빈 행을 건너뛰고 헤더 행 탐지
-    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-
-    // '순번'이 있는 행을 헤더로 인식
-    const headerRowIdx = raw.findIndex(row =>
-      Array.isArray(row) && row.some(v => v && v.toString().trim() === '순번')
-    );
-    if (headerRowIdx === -1)
-      return res.status(400).json({ error: '헤더 행(순번 컬럼)을 찾을 수 없습니다. 경매목록 시트의 형식을 확인하세요.' });
-
-    // 헤더: 중복 키는 마지막 인덱스 우선 (체크사항 등)
-    const headers = raw[headerRowIdx].map(h => (h != null ? h.toString().trim() : null));
-    const headerToIdx = {};
-    headers.forEach((h, i) => { if (h) headerToIdx[h] = i; });
-
-    // 데이터 행: 빈 행 제거
-    const dataRows = raw.slice(headerRowIdx + 1).filter(r =>
-      Array.isArray(r) && r.some(v => v !== null && v !== undefined && v !== '')
-    );
-    if (!dataRows.length) return res.status(400).json({ error: '데이터가 없습니다.' });
-
-    // 배열 행 → 헤더 키 객체 변환
-    const rowObjects = dataRows.map(row => {
-      const obj = {};
-      Object.entries(headerToIdx).forEach(([key, idx]) => {
-        obj[key] = (row[idx] !== undefined) ? row[idx] : null;
-      });
-      return obj;
-    });
-
-    console.log(`[auction upload] 파일: ${filename}, 시트: ${sheetName}, 헤더행: ${headerRowIdx + 1}, 데이터: ${rowObjects.length}행`);
-
-    const mapped = rowObjects.map(mapExcelRow).filter(r => r.case_no);
-    if (!mapped.length) return res.status(400).json({ error: '유효한 데이터 행이 없습니다.' });
-
-    // 같은 파일 내 중복 case_no 제거 (마지막 행 우선)
-    const seenCaseNo = new Map();
-    const noCaseNo   = [];
-    mapped.forEach(r => {
-      if (r.case_no) seenCaseNo.set(r.case_no, r);
-      else noCaseNo.push(r);
-    });
-    const auctions = [...seenCaseNo.values(), ...noCaseNo];
-
     const result = await db.upsertAuctions(auctions);
     const parts = [`진행중 ${result.upserted - result.markedAsNew}건`];
     if (result.markedAsNew > 0) parts.push(`신규 ${result.markedAsNew}건`);

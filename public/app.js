@@ -1685,18 +1685,120 @@ function downloadAuctionExcel() {
   showToast(`${data.length.toLocaleString()}건 다운로드 완료`);
 }
 
-/* 엑셀 업로드 */
+/* 엑셀 업로드 – 브라우저에서 XLSX 파싱 후 JSON으로 전송 (Vercel 4.5 MB 제한 우회) */
 async function handleAuctionUpload(input) {
   const file = input.files[0];
   if (!file) return;
-  input.value = ''; // 같은 파일 재업로드 허용
-
-  const formData = new FormData();
-  formData.append('file', file);
+  input.value = '';
 
   setLoading(true);
   try {
-    const res  = await fetch('/api/auction/upload', { method: 'POST', body: formData });
+    /* ── 1. 파일 파싱 ── */
+    const arrayBuf  = await file.arrayBuffer();
+    const wb        = XLSX.read(arrayBuf, { type: 'array', cellDates: false });
+    const sheetName = wb.SheetNames.find(n => n === '경매목록') || wb.SheetNames[0];
+    if (!sheetName) throw new Error('Excel 시트를 찾을 수 없습니다.');
+
+    const ws  = wb.Sheets[sheetName];
+    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+    /* ── 2. 헤더 행 탐지 ── */
+    const hIdx = raw.findIndex(row =>
+      Array.isArray(row) && row.some(v => v && v.toString().trim() === '순번')
+    );
+    if (hIdx === -1) throw new Error('헤더 행(순번 컬럼)을 찾을 수 없습니다.');
+
+    const headers     = raw[hIdx].map(h => h != null ? h.toString().trim() : null);
+    const headerToIdx = {};
+    headers.forEach((h, i) => { if (h) headerToIdx[h] = i; });
+
+    const dataRows = raw.slice(hIdx + 1).filter(r =>
+      Array.isArray(r) && r.some(v => v !== null && v !== undefined && v !== '')
+    );
+    if (!dataRows.length) throw new Error('데이터가 없습니다.');
+
+    /* ── 3. 행 객체 변환 ── */
+    const rowObjects = dataRows.map(row => {
+      const obj = {};
+      Object.entries(headerToIdx).forEach(([key, idx]) => {
+        obj[key] = row[idx] !== undefined ? row[idx] : null;
+      });
+      return obj;
+    });
+
+    /* ── 4. 파싱 헬퍼 ── */
+    const g = (row, ...keys) => {
+      for (const k of keys) {
+        const v = row[k];
+        if (v !== null && v !== undefined && v !== '') return v;
+      }
+      return null;
+    };
+    // 금액: 컬럼명에 '만원' 포함 시 이미 만원, 아니면 원→만원(÷10000)
+    const parseAmt = (row, ...keys) => {
+      for (const k of keys) {
+        const v = row[k];
+        if (v !== null && v !== undefined && v !== '') {
+          const n = parseFloat(v.toString().replace(/[,\s]/g, ''));
+          if (isNaN(n)) return null;
+          return k.includes('만원') ? Math.round(n) : Math.round(n / 10000);
+        }
+      }
+      return null;
+    };
+    const parsePyeong = v => {
+      if (v == null) return null;
+      const s = v.toString();
+      const m = s.match(/\(([0-9.]+)평\)/);
+      if (m) return parseFloat(m[1]) || null;
+      const n = parseFloat(s);
+      return isNaN(n) ? null : n;
+    };
+    const parseDateVal = v => {
+      if (v == null || v === '') return null;
+      if (typeof v === 'number') {
+        const d = XLSX.SSF.parse_date_code(v);
+        if (d) return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+      }
+      return v.toString().trim() || null;
+    };
+    const parseFloorAddr = addr => {
+      if (!addr) return null;
+      const s   = addr.toString();
+      const bm  = s.match(/(?:B|지하|지)\s*(\d+)\s*층/i);
+      if (bm) return -parseInt(bm[1], 10);
+      const mm  = s.match(/(\d{1,3})\s*층/);
+      return mm ? parseInt(mm[1], 10) : null;
+    };
+
+    /* ── 5. auction 필드 매핑 ── */
+    const rows = rowObjects.map(row => ({
+      case_no:         (g(row,'경매사건번호') || '').toString().trim() || null,
+      item_type:       (g(row,'물건종류')     || '').toString().trim() || null,
+      region:          (g(row,'지역')         || '').toString().trim() || null,
+      bid_date:        parseDateVal(g(row,'입찰일')),
+      status:          (() => { const s=(g(row,'상태')||'').toString().trim(); return s==='진행'?'진행중':s||null; })(),
+      appraisal_price: parseAmt(row,'감정가','감정가(만원)'),
+      winning_price:   parseAmt(row,'낙찰가','낙찰가(만원)'),
+      min_price:       parseAmt(row,'최저가','최저가(만원)'),
+      official_price:  parseAmt(row,'공시','공시(만원)'),
+      jeonse_market:   parseAmt(row,'전세 시세','전세시세','전세 시세(만원)'),
+      sale_market:     parseAmt(row,'매매 시세','매매시세','매매 시세(만원)'),
+      building_area:   parsePyeong(g(row,'건물평수')),
+      land_area:       parsePyeong(g(row,'대지평수')),
+      address:         (g(row,'주소') || '').toString().trim() || null,
+      floor:           parseFloorAddr((g(row,'주소') || '').toString()),
+      notes:           (g(row,'체크사항') || '').toString().trim() || null,
+    })).filter(r => r.case_no);
+
+    if (!rows.length) throw new Error('유효한 데이터 행이 없습니다. 경매사건번호 컬럼을 확인하세요.');
+
+    /* ── 6. JSON으로 서버 전송 ── */
+    const res  = await fetch('/api/auction/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows, filename: file.name }),
+    });
     const data = await res.json();
     if (!res.ok || !data.success) throw new Error(data.error || '업로드 실패');
     showToast(data.message || '업로드 완료', 'success');
