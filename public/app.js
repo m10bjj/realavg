@@ -1421,7 +1421,7 @@ function renderAuctionTable() {
       <td class="col-floor">${row.floor != null ? row.floor + '층' : '-'}</td>
       <td class="col-area">${row.building_area != null ? row.building_area : '-'}</td>
       <td class="col-area">${row.land_area != null ? row.land_area : '-'}</td>
-      <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="https://search.naver.com/search.naver?query=${encodeURIComponent(row.address)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산 검색">N</a> ` : ''}${esc(row.address)}</td>
+      <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="${naverLandUrl(row.address, row.item_type)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산 검색">N</a> ` : ''}${esc(row.address)}</td>
       <td class="col-notes" title="${esc(row.notes)}">${esc(row.notes)}</td>
       <td class="col-del"><button class="btn-row-del" onclick="deleteOneAuction(${row.id})" title="삭제">✕</button></td>
     </tr>`;
@@ -1499,6 +1499,24 @@ function refreshAuctionRow(id) {
 function esc(v) {
   if (v == null) return '-';
   return v.toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* 네이버 부동산 검색 URL: 주소에서 동 추출 + 물건종류 */
+function naverLandUrl(address, itemType) {
+  // 동 추출: "(화곡동, ...)" 괄호 패턴 우선, 없으면 주소에서 XX동 직접 추출
+  let dong = '';
+  const parenMatch = (address || '').match(/\(([^,)]+동)/);
+  if (parenMatch) {
+    dong = parenMatch[1].trim();
+  } else {
+    const dongMatch = (address || '').match(/([가-힣]+동)\b/);
+    if (dongMatch) dong = dongMatch[1];
+  }
+  // 물건종류 정규화
+  let type = (itemType || '').trim();
+  if (/빌라|다세대/.test(type)) type = '다세대';
+  const query = [dong, type].filter(Boolean).join(' ');
+  return `https://search.naver.com/search.naver?query=${encodeURIComponent(query)}`;
 }
 
 /* 인라인 편집: 시세 셀 클릭 → input 전환 */
@@ -2036,7 +2054,7 @@ function renderMyAuctionTable() {
       <td class="${profitCellClass(calcProfit(row.sale_market, row.min_price))}">${profitCellHtml(calcProfit(row.sale_market, row.min_price))}</td>
       <td class="col-floor">${row.floor != null ? row.floor + '층' : '-'}</td>
       <td class="col-area">${row.building_area != null ? row.building_area : '-'}</td>
-      <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="https://search.naver.com/search.naver?query=${encodeURIComponent(row.address)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산 검색">N</a> ` : ''}${esc(row.address)}</td>
+      <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="${naverLandUrl(row.address, row.item_type)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산 검색">N</a> ` : ''}${esc(row.address)}</td>
       <td class="col-notes my-editable" data-id="${row.id}" data-field="check_notes" data-val="${esc(row.check_notes || '')}" title="${esc(row.check_notes)}">${esc(row.check_notes) || '-'}</td>
       <td class="col-date">${savedDate}</td>
       <td class="col-del"><button class="btn-row-del" onclick="deleteOneMyAuction(${row.id})" title="삭제">✕</button></td>
