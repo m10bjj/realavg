@@ -458,6 +458,7 @@ const TRADE_COLUMNS = {
 ═══════════════════════════════════════════════════════ */
 function getFilteredRows() {
   const dong     = (document.getElementById('filter-dong')?.value || '').trim();
+  const aptName  = (document.getElementById('filter-apt-name')?.value || '').trim().toLowerCase();
   const areaMin  = parseFloat(document.getElementById('filter-area-min')?.value);
   const areaMax  = parseFloat(document.getElementById('filter-area-max')?.value);
   const floorMin = parseFloat(document.getElementById('filter-floor-min')?.value);
@@ -467,6 +468,7 @@ function getFilteredRows() {
 
   return currentResults.filter(row => {
     if (dong && String(row.dong || '').trim() !== dong) return false;
+    if (aptName && !String(row.apt_name || '').toLowerCase().includes(aptName)) return false;
     const area = parseFloat(row.area);
     if (!isNaN(areaMin) && (isNaN(area) || area < areaMin)) return false;
     if (!isNaN(areaMax) && (isNaN(area) || area > areaMax)) return false;
@@ -478,6 +480,16 @@ function getFilteredRows() {
     if (!isNaN(yearMax) && (isNaN(buildYear) || buildYear > yearMax)) return false;
     return true;
   });
+}
+
+function onTradeTypeChange() {
+  const tradeType = document.getElementById('trade-type').value;
+  const isApt = tradeType === 'apt-trade' || tradeType === 'apt-rent';
+  const group = document.getElementById('filter-aptname-group');
+  if (group) {
+    group.style.display = isApt ? '' : 'none';
+    if (!isApt) document.getElementById('filter-apt-name').value = '';
+  }
 }
 
 function applyFilters() {
@@ -563,7 +575,7 @@ function renderPage() {
       } else if (c.key === 'cancel_yn' && val === 'O') {
         display = `<span class="cancelled">해제</span>`;
       } else if (c.key === 'contract_type' && val) {
-        const cls = val === '신규' ? 'tag-new' : 'tag-renew';
+        const cls = val === '신건' ? 'tag-new' : 'tag-renew';
         display = `<span class="tag ${cls}">${val}</span>`;
       }
       const cls = c.cls ? ` class="${c.cls}"` : '';
@@ -1316,7 +1328,7 @@ function calcProfit(market, minPrice) {
 function statusClass(status) {
   if (!status) return '';
   if (status === '낙찰')   return 'badge-won';
-  if (status === '신규')   return 'badge-new';
+  if (status === '신건')   return 'badge-new';
   if (status === '진행중') return 'badge-active';
   return 'badge-neutral';
 }
@@ -1354,13 +1366,13 @@ function renderAuctionTable() {
   if (saveMyBtn) saveMyBtn.style.display = auctionSelected.size > 0 ? '' : 'none';
 
   if (!auctionData.length) {
-    tbody.innerHTML = '<tr><td colspan="20" class="auction-empty">데이터가 없습니다. 엑셀 파일을 업로드하세요.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="21" class="auction-empty">데이터가 없습니다. 엑셀 파일을 업로드하세요.</td></tr>';
     document.getElementById('auction-pagination').innerHTML = '';
     document.getElementById('auction-page-info').textContent = '';
     return;
   }
   if (!auctionFiltered.length) {
-    tbody.innerHTML = '<tr><td colspan="20" class="auction-empty">조건에 맞는 데이터가 없습니다.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="21" class="auction-empty">조건에 맞는 데이터가 없습니다.</td></tr>';
     document.getElementById('auction-pagination').innerHTML = '';
     document.getElementById('auction-page-info').textContent = '';
     return;
@@ -1399,6 +1411,7 @@ function renderAuctionTable() {
       <td class="col-status"><span class="status-badge ${sc}">${esc(row.status) || '-'}</span></td>
       <td class="col-price">${fmtAmt(row.appraisal_price)}</td>
       <td class="col-price">${fmtAmt(row.winning_price)}</td>
+      <td class="col-pct">${(row.winning_price && row.appraisal_price) ? (row.winning_price / row.appraisal_price * 100).toFixed(1) + '%' : '-'}</td>
       <td class="col-price">${fmtAmt(row.min_price)}</td>
       <td class="col-price">${fmtAmt(row.official_price)}</td>
       <td class="col-market">${marketCellHtml(row.id, 'jeonse_market', row.jeonse_market)}</td>
@@ -1473,14 +1486,14 @@ function refreshAuctionRow(id) {
   const salePft   = calcProfit(row.sale_market, row.min_price);
   const cells     = tr.querySelectorAll('td');
 
-  // col 순서: 0체크, 1순번, 2사건번호, 3종류, 4지역, 5입찰일, 6상태, 7감정가, 8낙찰가, 9최저가, 10공시
-  // 11전세시세, 12전세차익, 13매매시세, 14매매차익
-  cells[11].innerHTML = marketCellHtml(row.id, 'jeonse_market', row.jeonse_market);
-  cells[12].className = profitCellClass(jeonsePft);
-  cells[12].innerHTML = profitCellHtml(jeonsePft);
-  cells[13].innerHTML = marketCellHtml(row.id, 'sale_market', row.sale_market);
-  cells[14].className = profitCellClass(salePft);
-  cells[14].innerHTML = profitCellHtml(salePft);
+  // col 순서: 0체크, 1순번, 2사건번호, 3종류, 4지역, 5입찰일, 6상태, 7감정가, 8낙찰가, 9낙찰률, 10최저가, 11공시
+  // 12전세시세, 13전세차익, 14매매시세, 15매매차익
+  cells[12].innerHTML = marketCellHtml(row.id, 'jeonse_market', row.jeonse_market);
+  cells[13].className = profitCellClass(jeonsePft);
+  cells[13].innerHTML = profitCellHtml(jeonsePft);
+  cells[14].innerHTML = marketCellHtml(row.id, 'sale_market', row.sale_market);
+  cells[15].className = profitCellClass(salePft);
+  cells[15].innerHTML = profitCellHtml(salePft);
 }
 
 function esc(v) {
@@ -1617,7 +1630,9 @@ async function deleteAllAuctions() {
   if (!auctionData.length) return;
   if (!confirm('전체 경매 데이터를 삭제하겠습니까?')) return;
   try {
-    await fetch('/api/auction/all', { method: 'DELETE' });
+    const res  = await fetch('/api/auction/all', { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
     auctionData     = [];
     auctionFiltered = [];
     auctionSelected.clear();
@@ -1690,6 +1705,12 @@ async function handleAuctionUpload(input) {
   const file = input.files[0];
   if (!file) return;
   input.value = '';
+
+  /* ── 파일명 검증: "물건추천 - "으로 시작해야 함 ── */
+  if (!file.name.startsWith('물건추천 - ')) {
+    showToast('양식 파일이 아닙니다. 파일명이 "물건추천 - "으로 시작해야 합니다.', 'error');
+    return;
+  }
 
   setLoading(true);
   try {
@@ -1793,15 +1814,87 @@ async function handleAuctionUpload(input) {
 
     if (!rows.length) throw new Error('유효한 데이터 행이 없습니다. 경매사건번호 컬럼을 확인하세요.');
 
-    /* ── 6. JSON으로 서버 전송 ── */
-    const res  = await fetch('/api/auction/upload', {
+    /* ── 6. "낙찰 된것" 시트에서 wonMap 추출 (case_no → winning_price 만원) ── */
+    const wonMap = {};
+    let wonSheetCaseNos = []; // 낙찰 된것 시트에 있는 모든 case_no
+    let wonSheetExists  = false;
+    try {
+      const wonSheetName = wb.SheetNames.find(n => n.includes('낙찰'));
+      if (wonSheetName) {
+        wonSheetExists = true;
+        const wonWs  = wb.Sheets[wonSheetName];
+        // !ref 범위를 최대 30컬럼으로 제한 → 수백 개의 null 컬럼 파싱 방지
+        if (wonWs['!ref']) {
+          const r = XLSX.utils.decode_range(wonWs['!ref']);
+          wonWs['!ref'] = XLSX.utils.encode_range({ s: r.s, e: { r: r.e.r, c: Math.min(r.e.c, 30) } });
+        }
+        const wonRaw = XLSX.utils.sheet_to_json(wonWs, { header: 1, defval: null });
+        const wonHIdx = wonRaw.findIndex(row =>
+          Array.isArray(row) && row.some(v => v && (v.toString().trim() === '순번' || v.toString().trim() === '경매사건번호'))
+        );
+        if (wonHIdx !== -1) {
+          const wonHeaders     = wonRaw[wonHIdx].map(h => h != null ? h.toString().trim() : null);
+          const wonHeaderToIdx = {};
+          wonHeaders.forEach((h, i) => { if (h) wonHeaderToIdx[h] = i; });
+          const cnoIdx = wonHeaderToIdx['경매사건번호'];
+          const wpKey  = wonHeaders.find(h => h && h.includes('낙찰가'));
+          const wpIdx  = wpKey != null ? wonHeaderToIdx[wpKey] : -1;
+          const wonCaseNosSet = new Set();
+          wonRaw.slice(wonHIdx + 1)
+            .filter(r => Array.isArray(r) && r.some(v => v !== null && v !== undefined && v !== ''))
+            .forEach(row => {
+              const cno = cnoIdx != null && row[cnoIdx] != null ? row[cnoIdx].toString().trim() : null;
+              if (cno) wonCaseNosSet.add(cno);
+              if (!cno || wpIdx === -1) return;
+              const raw = row[wpIdx];
+              if (raw == null || raw === '') return;
+              const n = parseFloat(raw.toString().replace(/[,\s]/g, ''));
+              if (!isNaN(n)) wonMap[cno] = wpKey.includes('만원') ? Math.round(n) : Math.round(n / 10000);
+            });
+          wonSheetCaseNos = [...wonCaseNosSet];
+        }
+      }
+    } catch (wonErr) {
+      console.warn('낙찰 된것 시트 파싱 오류 (무시됨):', wonErr.message);
+    }
+
+    const postJSON = (url, body) => fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows, filename: file.name }),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.error || '업로드 실패');
-    showToast(data.message || '업로드 완료', 'success');
+      body: JSON.stringify(body),
+    }).then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok || !d.success) throw new Error([d.error, d.details, d.hint].filter(Boolean).join(' | ') || `서버 오류 (${r.status})`); return d; });
+
+    /* ── 7. 1단계: case_no 목록만 전송 → 낙찰/변경 처리 (~55KB) ── */
+    const caseNos = rows.map(r => r.case_no).filter(Boolean);
+    const phase1  = await postJSON('/api/auction/mark-won', { caseNos, wonSheetCaseNos, wonSheetExists });
+    const wonCaseNos      = phase1.wonCaseNos      || [];
+    const changedCaseNos  = phase1.changedCaseNos  || [];
+    const existingCaseNos = phase1.existingCaseNos || [];
+
+    /* ── 8. 2단계: rows를 400건씩 배치 전송 ── */
+    const BATCH = 400;
+    let totalUpserted = 0, totalNew = 0;
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const batch = rows.slice(i, i + BATCH);
+      const r = await postJSON('/api/auction/upsert-rows', { rows: batch, existingCaseNos });
+      totalUpserted += r.upserted || 0;
+      totalNew      += r.markedAsNew || 0;
+    }
+
+    /* ── 9. 낙찰된 항목 winning_price 업데이트 ── */
+    if (wonCaseNos.length > 0 && Object.keys(wonMap).length > 0) {
+      const prices = {};
+      wonCaseNos.forEach(cno => { if (wonMap[cno] != null) prices[cno] = wonMap[cno]; });
+      if (Object.keys(prices).length > 0) {
+        await postJSON('/api/auction/won-prices', { prices });
+      }
+    }
+
+    const parts = [`진행중 ${totalUpserted - totalNew}건`];
+    if (totalNew > 0)              parts.push(`신건 ${totalNew}건`);
+    if (wonCaseNos.length > 0)     parts.push(`낙찰 ${wonCaseNos.length}건`);
+    if (changedCaseNos.length > 0) parts.push(`변경/낙찰 ${changedCaseNos.length}건`);
+    showToast(parts.join(', ') + ' 처리완료', 'success');
     await loadAuctions();
   } catch (e) {
     showToast('업로드 오류: ' + e.message, 'error');

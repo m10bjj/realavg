@@ -19,7 +19,7 @@ const app        = express();
 const PORT       = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'realestate-jwt-secret-2024';
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
 
 /* ──────────────────────────────────────────
@@ -185,8 +185,8 @@ app.post('/auth/change-recovery', async (req, res) => {
    국토부 API 엔드포인트 매핑
 ────────────────────────────────────────── */
 const ENDPOINTS = {
-  'apt-trade':    'https://apis.data.go.kr/1613000/RTMSOBJSvc/getRTMSDataSvcAptTrade',
-  'apt-rent':     'https://apis.data.go.kr/1613000/RTMSOBJSvc/getRTMSDataSvcAptRent',
+  'apt-trade':    'https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade',
+  'apt-rent':     'https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent',
   'villa-trade':  'https://apis.data.go.kr/1613000/RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade',
   'house-trade':  'https://apis.data.go.kr/1613000/RTMSOBJSvc/getRTMSDataSvcSHRealTrade',
   'office-trade': 'https://apis.data.go.kr/1613000/RTMSOBJSvc/getRTMSDataSvcOffiTrade',
@@ -244,7 +244,10 @@ app.post('/api/search', async (req, res) => {
     return res.status(400).json({ error: '필수 파라미터가 누락되었습니다.' });
   }
 
-  const rawKey = req.headers['x-service-key'] || process.env.SERVICE_KEY || '';
+  const isApt = tradeType === 'apt-trade' || tradeType === 'apt-rent';
+  const rawKey = isApt
+    ? (process.env.APT_SERVICE_KEY || req.headers['x-service-key'] || process.env.SERVICE_KEY || '')
+    : (req.headers['x-service-key'] || process.env.SERVICE_KEY || '');
   if (!rawKey) {
     return res.status(400).json({
       error: 'API 서비스키가 없습니다. 설정(⚙)에서 서비스키를 입력하거나 환경변수에 SERVICE_KEY를 설정하세요.',
@@ -331,8 +334,8 @@ function t(val) {
 }
 
 function mapItem(item, tradeType, searchId) {
-  const isVilla = tradeType === 'villa-trade';
-  const base = isVilla ? {
+  const useEnglishFields = tradeType === 'villa-trade' || tradeType === 'apt-trade' || tradeType === 'apt-rent';
+  const base = useEnglishFields ? {
     searchId,
     deal_year:  t(item['dealYear']),
     deal_month: t(item['dealMonth']).padStart(2, '0'),
@@ -355,20 +358,20 @@ function mapItem(item, tradeType, searchId) {
   switch (tradeType) {
     case 'apt-trade':
       return { ...base,
-        apt_name:    t(item['아파트']),
-        deal_amount: t(item['거래금액']).replace(/,/g, ''),
-        road_name:   t(item['도로명']),
-        deal_type:   t(item['거래유형']),
-        cancel_yn:   t(item['해제여부']),
-        cancel_date: t(item['해제사유발생일']),
+        apt_name:    t(item['aptNm']),
+        deal_amount: t(item['dealAmount']).replace(/,/g, ''),
+        road_name:   t(item['jibun']),
+        deal_type:   t(item['dealingGbn']),
+        cancel_yn:   t(item['cdealType']),
+        cancel_date: t(item['cdealDay']),
       };
     case 'apt-rent':
       return { ...base,
-        apt_name:        t(item['아파트']),
-        deposit:         t(item['보증금액']).replace(/,/g, ''),
-        monthly_rent:    t(item['월세금액']).replace(/,/g, '') || '0',
-        contract_type:   t(item['계약구분']),
-        contract_period: t(item['계약기간']),
+        apt_name:        t(item['aptNm']),
+        deposit:         t(item['deposit'] || item['보증금액'] || '').toString().replace(/,/g, ''),
+        monthly_rent:    t(item['monthlyRent'] || item['월세금액'] || '0').toString().replace(/,/g, '') || '0',
+        contract_type:   t(item['contractType'] || item['계약구분'] || ''),
+        contract_period: t(item['contractPeriod'] || item['계약기간'] || ''),
       };
     case 'villa-trade':
       return { ...base,
@@ -559,28 +562,26 @@ function mapExcelRow(row) {
 
 /* GET /api/auction/template – 업로드 양식 엑셀 다운로드 */
 app.get('/api/auction/template', requireAuth, (_req, res) => {
-  const headers = [
-    '순번', '경매사건번호', '물건종류', '지역', '입찰일', '상태',
-    '감정가', '낙찰가', '최저가', '공시',
-    '전세 시세', '전세 차익', '매매 시세', '매매 차익',
-    '건물평수', '대지평수', '주소', '체크사항',
-  ];
-  const sample = [
-    1, '2025타경12345', '아파트', '수원', '2026-03-15', '진행중',
-    390000000, '', 273000000, 280000000,
-    '', '', '', '',
-    '7.82평 (25.85㎡)', '10.5평 (34.71㎡)', '경기도 수원시 팔달구 XX동 123-4', '주차 협소',
-  ];
-  const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
-  // 열 너비 설정
-  ws['!cols'] = headers.map((h, i) => {
-    const widths = [6,18,10,8,12,8,14,14,14,14,12,12,12,12,12,12,30,20];
-    return { wch: widths[i] || 12 };
-  });
+  const tplPath = path.join(__dirname, '물건추천 - 리스트_날짜_양식.xlsx');
+  if (fs.existsSync(tplPath)) {
+    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''%EB%AC%BC%EA%B1%B4%EC%B6%94%EC%B2%9C%20-%20%EB%A6%AC%EC%8A%A4%ED%8A%B8_%EB%82%A0%EC%A7%9C_%EC%96%91%EC%8B%9D.xlsx");
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return res.send(fs.readFileSync(tplPath));
+  }
+  // 파일 없으면 동적 생성
+  const LIST_HEADERS = ['순번','경매사건번호','물건종류','지역','입찰일','상태','감정가','낙찰가','최저가','공시','체크사항','전세 시세','전세 차익','매매 시세','매매 차익','건물평수','대지평수','주소','체크사항'];
+  const TITLE_ROW = Array(LIST_HEADERS.length).fill(null).map((_, i) => i === 12 ? '물건 추천 날짜기준\n* 낙찰건 제외' : null);
+  const listAoa = [TITLE_ROW, Array(LIST_HEADERS.length).fill(null), Array(LIST_HEADERS.length).fill(null), LIST_HEADERS];
+  const listWs = XLSX.utils.aoa_to_sheet(listAoa);
+  listWs['!cols'] = [6,20,12,8,14,8,14,14,14,14,16,14,14,14,14,18,18,50,20].map(wch => ({ wch }));
+  const WON_HEADERS = ['순번','경매사건번호','지역','입찰일','상태','감정가','낙찰가(만원)','최저가','공시'];
+  const wonWs = XLSX.utils.aoa_to_sheet([WON_HEADERS]);
+  wonWs['!cols'] = [6,20,8,10,8,14,14,14,14].map(wch => ({ wch }));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '경매목록');
+  XLSX.utils.book_append_sheet(wb, listWs, '경매목록');
+  XLSX.utils.book_append_sheet(wb, wonWs, '낙찰 된것');
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-  res.setHeader('Content-Disposition', 'attachment; filename*=UTF-8\'\'%EB%B6%80%EB%8F%99%EC%82%B0%EA%B2%BD%EB%A7%A4_%EC%97%85%EB%A1%9C%EB%93%9C_%EC%96%91%EC%8B%9D.xlsx');
+  res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''%EB%AC%BC%EA%B1%B4%EC%B6%94%EC%B2%9C%20-%20%EB%A6%AC%EC%8A%A4%ED%8A%B8_%EB%82%A0%EC%A7%9C_%EC%96%91%EC%8B%9D.xlsx");
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.send(buf);
 });
@@ -611,13 +612,14 @@ app.post('/api/auction/upload', async (req, res) => {
   try {
     const result = await db.upsertAuctions(auctions);
     const parts = [`진행중 ${result.upserted - result.markedAsNew}건`];
-    if (result.markedAsNew > 0) parts.push(`신규 ${result.markedAsNew}건`);
+    if (result.markedAsNew > 0) parts.push(`신건 ${result.markedAsNew}건`);
     if (result.markedAsWon > 0) parts.push(`낙찰 ${result.markedAsWon}건`);
     res.json({
       success: true,
       upserted:    result.upserted,
       markedAsWon: result.markedAsWon,
       markedAsNew: result.markedAsNew,
+      wonCaseNos:  result.wonCaseNos || [],
       message: parts.join(', ') + ' 처리완료',
     });
   } catch (e) {
@@ -630,6 +632,43 @@ app.post('/api/auction/upload', async (req, res) => {
       return res.status(500).json({ error: 'Supabase에 auctions 테이블이 없습니다. Supabase SQL Editor에서 테이블을 먼저 생성해주세요.' });
     }
     res.status(500).json({ error: msg || '업로드 처리 중 오류가 발생했습니다.' });
+  }
+});
+
+/* POST /api/auction/mark-won  – 1단계: case_no 목록으로 낙찰/변경 처리 */
+app.post('/api/auction/mark-won', async (req, res) => {
+  const { caseNos = [], wonSheetCaseNos = [], wonSheetExists = false } = req.body;
+  try {
+    const result = await db.markWonAuctions(caseNos, wonSheetCaseNos, wonSheetExists);
+    res.json({ success: true, ...result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* POST /api/auction/upsert-rows  – 2단계: rows 배치 upsert */
+app.post('/api/auction/upsert-rows', async (req, res) => {
+  const { rows = [], existingCaseNos = [] } = req.body;
+  if (!rows.length) return res.json({ success: true, upserted: 0, markedAsNew: 0 });
+  try {
+    const result = await db.upsertAuctionRows(rows, existingCaseNos);
+    res.json({ success: true, ...result });
+  } catch (e) {
+    console.error('[upsert-rows]', e);
+    res.status(500).json({ error: e.message, details: e.details, hint: e.hint, code: e.code });
+  }
+});
+
+/* POST /api/auction/won-prices  – 낙찰된 항목의 낙찰가 업데이트 */
+app.post('/api/auction/won-prices', async (req, res) => {
+  const { prices } = req.body; // { case_no: winning_price(만원) }
+  if (!prices || typeof prices !== 'object' || !Object.keys(prices).length)
+    return res.json({ success: true, updated: 0 });
+  try {
+    await db.updateWonPrices(prices);
+    res.json({ success: true, updated: Object.keys(prices).length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -664,6 +703,21 @@ app.delete('/api/auction/all', async (_req, res) => {
 app.delete('/api/auction/:id', async (req, res) => {
   try { await db.deleteAuction(parseInt(req.params.id, 10)); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* POST /api/auction/migrate-status – 신규 → 신건 일괄 변경 */
+app.post('/api/auction/migrate-status', async (_req, res) => {
+  try {
+    const supabase = require('./lib/supabase');
+    const { data, error } = await supabase
+      .from('auctions')
+      .update({ status: '신건', updated_at: new Date().toISOString() })
+      .eq('status', '신규');
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 /* POST /api/auction/migrate-floor – 기존 주소 데이터에서 층수 일괄 파싱 */
@@ -792,6 +846,32 @@ app.delete('/api/profit-analysis/:id', async (req, res) => {
 /* ──────────────────────────────────────────
    서버 시작 / Vercel 내보내기
 ────────────────────────────────────────── */
+/* 서버 시작 시 신규 → 신건 일괄 마이그레이션 */
+(async () => {
+  try {
+    const supabase = require('./lib/supabase');
+    const { error } = await supabase
+      .from('auctions')
+      .update({ status: '신건', updated_at: new Date().toISOString() })
+      .eq('status', '신규');
+    if (error) console.warn('[migrate] 신규→신건 실패:', error.message);
+    else console.log('[migrate] 신규→신건 완료');
+  } catch (e) {
+    console.warn('[migrate] 신규→신건 오류:', e.message);
+  }
+  try {
+    const supabase = require('./lib/supabase');
+    const { error } = await supabase
+      .from('auctions')
+      .update({ status: '변경/낙찰', updated_at: new Date().toISOString() })
+      .eq('status', '변경');
+    if (error) console.warn('[migrate] 변경→변경/낙찰 실패:', error.message);
+    else console.log('[migrate] 변경→변경/낙찰 완료');
+  } catch (e) {
+    console.warn('[migrate] 변경→변경/낙찰 오류:', e.message);
+  }
+})();
+
 if (require.main === module) {
   const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
   const certPath   = path.join(__dirname, 'certs', 'cert.pem');

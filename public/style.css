@@ -1141,6 +1141,7 @@ body {
 .col-date   { width: 90px; text-align: center; }
 .col-status { width: 70px; text-align: center; }
 .col-price  { width: 100px; text-align: right; }
+.col-pct    { width: 68px;  text-align: right; color: #555; }
 .col-market { width: 110px; text-align: right; }
 .col-profit { width: 100px; text-align: right; font-weight: 600; }
 .col-floor  { width: 52px; text-align: center; }

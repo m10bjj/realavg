@@ -122,11 +122,113 @@ async function getAuctions() {
 /**
  * rows 배열을 auctions 테이블에 upsert (case_no 기준).
  * - DB에 있는 레코드 중 파일에 없는 case_no → 낙찰 처리
- * - 파일에 있지만 DB에 없는 case_no         → status='신규' 로 삽입
+ * - 파일에 있지만 DB에 없는 case_no         → status='신건' 로 삽입
  * - 파일에도 있고 DB에도 있는 case_no        → status='진행중' 유지
  */
+/** 1단계: case_no 목록을 받아 낙찰/변경 처리, wonCaseNos·changedCaseNos 반환
+ *  - fileCaseNos에 없고, wonSheetExists=true이면:
+ *      wonSheetCaseNos에 있으면 → status='낙찰'
+ *      wonSheetCaseNos에 없으면 → status='변경'
+ *  - wonSheetExists=false이면 (낙찰된것 시트 없음) → 모두 status='낙찰' (기존 동작)
+ */
+async function markWonAuctions(caseNos, wonSheetCaseNos = [], wonSheetExists = false) {
+  const fileCaseNos = new Set(caseNos.filter(Boolean));
+  const wonSheetSet = new Set(wonSheetCaseNos.filter(Boolean));
+  const now = new Date().toISOString();
+
+  let existing = [];
+  let selFrom = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('auctions').select('id, case_no')
+      .range(selFrom, selFrom + 999);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    existing = existing.concat(data);
+    if (data.length < 1000) break;
+    selFrom += 1000;
+  }
+
+  const existingMap = new Map(existing.filter(r => r.case_no).map(r => [r.case_no, r.id]));
+
+  const toMarkWon     = []; // status='낙찰'
+  const toMarkChanged = []; // status='변경'
+  existingMap.forEach((id, cno) => {
+    if (!fileCaseNos.has(cno)) {
+      if (wonSheetExists && wonSheetSet.has(cno)) {
+        toMarkWon.push({ id, cno });
+      } else if (wonSheetExists) {
+        toMarkChanged.push({ id, cno });
+      } else {
+        toMarkWon.push({ id, cno }); // 낙찰된것 시트 없으면 기존 동작
+      }
+    }
+  });
+
+  const toMarkWonIds = toMarkWon.map(({ id }) => id);
+  for (let i = 0; i < toMarkWonIds.length; i += 500) {
+    const chunk = toMarkWonIds.slice(i, i + 500);
+    const { error } = await supabase
+      .from('auctions').update({ status: '낙찰', updated_at: now }).in('id', chunk);
+    if (error) throw error;
+  }
+
+  const toMarkChangedIds = toMarkChanged.map(({ id }) => id);
+  for (let i = 0; i < toMarkChangedIds.length; i += 500) {
+    const chunk = toMarkChangedIds.slice(i, i + 500);
+    const { error } = await supabase
+      .from('auctions').update({ status: '변경/낙찰', updated_at: now }).in('id', chunk);
+    if (error) throw error;
+  }
+
+  return {
+    markedAsWon:     toMarkWonIds.length,
+    markedAsChanged: toMarkChangedIds.length,
+    wonCaseNos:      toMarkWon.map(({ cno }) => cno),
+    changedCaseNos:  toMarkChanged.map(({ cno }) => cno),
+    existingCaseNos: [...existingMap.keys()],
+  };
+}
+
+/** 2단계: rows 배치 upsert (status는 existingCaseNos 기준으로 결정) */
+async function upsertAuctionRows(rows, existingCaseNos = []) {
+  if (!rows.length) return { upserted: 0, markedAsNew: 0 };
+  const existingSet = new Set(existingCaseNos);
+  const now = new Date().toISOString();
+  let markedAsNew = 0;
+
+  // case_no 중복 제거 (같은 배치 내 중복 시 PostgreSQL upsert 오류 방지, 마지막 행 우선)
+  const seen = new Map();
+  rows.forEach(r => { if (r.case_no) seen.set(r.case_no, r); });
+  const deduped = rows.filter(r => !r.case_no || seen.get(r.case_no) === r);
+
+  const prepared = deduped.map(r => {
+    if (!r.case_no) return { ...r, status: r.status || '진행중', updated_at: now };
+    if (!existingSet.has(r.case_no)) { markedAsNew++; return { ...r, status: '신건', updated_at: now }; }
+    return { ...r, status: '진행중', updated_at: now };
+  });
+
+  const CHUNK = 400;
+  let upserted = 0;
+  const withCaseNo    = prepared.filter(r => r.case_no);
+  const withoutCaseNo = prepared.filter(r => !r.case_no);
+
+  for (let i = 0; i < withCaseNo.length; i += CHUNK) {
+    const { error } = await supabase
+      .from('auctions').upsert(withCaseNo.slice(i, i + CHUNK), { onConflict: 'case_no', ignoreDuplicates: false });
+    if (error) throw error;
+    upserted += Math.min(CHUNK, withCaseNo.length - i);
+  }
+  for (let i = 0; i < withoutCaseNo.length; i += CHUNK) {
+    const { error } = await supabase.from('auctions').insert(withoutCaseNo.slice(i, i + CHUNK));
+    if (error) throw error;
+    upserted += Math.min(CHUNK, withoutCaseNo.length - i);
+  }
+  return { upserted, markedAsNew };
+}
+
 async function upsertAuctions(rows) {
-  if (!rows.length) return { upserted: 0, markedAsWon: 0, markedAsNew: 0 };
+  if (!rows.length) return { upserted: 0, markedAsWon: 0, markedAsNew: 0, wonCaseNos: [] };
 
   const now = new Date().toISOString();
 
@@ -148,9 +250,12 @@ async function upsertAuctions(rows) {
   const fileCaseNos = new Set(rows.map(r => r.case_no).filter(Boolean));
 
   // DB에 있지만 파일에 없는 것 → 낙찰 처리
-  const toMarkIds = [];
-  existingMap.forEach((id, cno) => { if (!fileCaseNos.has(cno)) toMarkIds.push(id); });
+  const toMarkWon = []; // { id, case_no }
+  existingMap.forEach((id, cno) => { if (!fileCaseNos.has(cno)) toMarkWon.push({ id, cno }); });
   let markedAsWon = 0;
+
+  // 낙찰 처리 (status='낙찰') – 500건씩 배치
+  const toMarkIds = toMarkWon.map(({ id }) => id);
   for (let i = 0; i < toMarkIds.length; i += 500) {
     const chunk = toMarkIds.slice(i, i + 500);
     const { error } = await supabase
@@ -158,16 +263,17 @@ async function upsertAuctions(rows) {
       .update({ status: '낙찰', updated_at: now })
       .in('id', chunk);
     if (error) throw error;
-    markedAsWon += chunk.length;
   }
+  markedAsWon = toMarkIds.length;
+  const wonCaseNos = toMarkWon.map(({ cno }) => cno);
 
   // 파일 행 status 결정
-  //  - DB에 없는 case_no → '신규'
+  //  - DB에 없는 case_no → '신건'
   //  - DB에 있는 case_no → '진행중'
   let markedAsNew = 0;
   rows = rows.map(r => {
     if (!r.case_no) return { ...r, status: r.status || '진행중' };
-    if (!existingMap.has(r.case_no)) { markedAsNew++; return { ...r, status: '신규' }; }
+    if (!existingMap.has(r.case_no)) { markedAsNew++; return { ...r, status: '신건' }; }
     return { ...r, status: '진행중' };
   });
 
@@ -198,7 +304,20 @@ async function upsertAuctions(rows) {
     upserted += chunk.length;
   }
 
-  return { upserted, markedAsWon, markedAsNew };
+  return { upserted, markedAsWon, markedAsNew, wonCaseNos };
+}
+
+async function updateWonPrices(prices) {
+  // prices: { case_no: winning_price(만원) }
+  const now = new Date().toISOString();
+  for (const [cno, wp] of Object.entries(prices)) {
+    if (!cno || wp == null) continue;
+    const { error } = await supabase
+      .from('auctions')
+      .update({ winning_price: wp, updated_at: now })
+      .eq('case_no', cno);
+    if (error) throw error;
+  }
 }
 
 async function updateAuction(id, fields) {
@@ -220,7 +339,7 @@ async function deleteAuctionBatch(ids) {
 }
 
 async function deleteAllAuctions() {
-  const { error } = await supabase.from('auctions').delete().not('id', 'is', null);
+  const { error } = await supabase.from('auctions').delete().gte('id', 0);
   if (error) throw error;
 }
 
@@ -325,7 +444,7 @@ async function deleteProfitAnalysis(id) {
 module.exports = {
   saveSearch, saveTransactionBatch, getHistory,
   getTransactions, deleteSearch, deleteSearchBatch, deleteAllSearches,
-  getAuctions, upsertAuctions, updateAuction,
+  getAuctions, markWonAuctions, upsertAuctionRows, upsertAuctions, updateWonPrices, updateAuction,
   deleteAuction, deleteAuctionBatch, deleteAllAuctions,
   getMyAuctions, addMyAuctions, updateMyAuction,
   deleteMyAuction, deleteMyAuctionBatch,
