@@ -2008,7 +2008,7 @@ function renderMyAuctionTable() {
   }
 
   if (total === 0) {
-    tbody.innerHTML = '<tr><td colspan="22" class="auction-empty">저장된 데이터가 없습니다.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="23" class="auction-empty">저장된 데이터가 없습니다.</td></tr>';
     renderMyAuctionPagination(1);
     return;
   }
@@ -2027,6 +2027,7 @@ function renderMyAuctionTable() {
       <td class="col-status my-editable" data-id="${row.id}" data-field="my_status" data-val="${row.my_status || '진행중'}"><span class="status-badge ${sc}">${esc(row.my_status) || '진행중'}</span></td>
       <td class="col-price">${fmtAmt(row.appraisal_price)}</td>
       <td class="col-price my-editable" data-id="${row.id}" data-field="winning_price" data-val="${row.winning_price ?? ''}">${fmtAmt(row.winning_price)}</td>
+      <td class="col-pct">${(row.winning_price && row.appraisal_price) ? (row.winning_price / row.appraisal_price * 100).toFixed(1) + '%' : '-'}</td>
       <td class="col-price my-editable" data-id="${row.id}" data-field="min_price" data-val="${row.min_price ?? ''}">${fmtAmt(row.min_price)}</td>
       <td class="col-price">${fmtAmt(row.official_price)}</td>
       <td class="col-market my-editable" data-id="${row.id}" data-field="jeonse_market" data-val="${row.jeonse_market ?? ''}">${fmtAmt(row.jeonse_market)}</td>
