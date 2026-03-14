@@ -1148,6 +1148,13 @@ body {
 .col-area   { width: 72px; text-align: right; }
 .col-addr   { width: 220px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .col-notes  { width: 160px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.naver-land-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 3px;
+  background: #03c75a; color: #fff; font-size: 10px; font-weight: 700;
+  text-decoration: none; vertical-align: middle; margin-left: 4px; flex-shrink: 0;
+}
+.naver-land-link:hover { background: #02a84a; }
 .col-del    { width: 36px; text-align: center; }
 
 /* 상태 배지 */
