@@ -1512,7 +1512,7 @@ function naverLandUrl(address, itemType) {
     const k = token.replace(/[^가-힣]/g, ''); // 한글만 추출
     if (!sido && /(?:특별시|광역시|특별자치시|특별자치도|시|도)$/.test(k)) { sido = k; continue; }
     if (!gu   && /(?:구|군)$/.test(k)) { gu = k; continue; }
-    if (!dong && /동$/.test(k))        { dong = k; continue; }
+    if (!dong && /(?:읍|면|동)$/.test(k)) { dong = k; continue; }
   }
 
   // 물건종류 정규화
