@@ -1421,7 +1421,7 @@ function renderAuctionTable() {
       <td class="col-floor">${row.floor != null ? row.floor + '층' : '-'}</td>
       <td class="col-area">${row.building_area != null ? row.building_area : '-'}</td>
       <td class="col-area">${row.land_area != null ? row.land_area : '-'}</td>
-      <td class="col-addr" title="${esc(row.address)}">${esc(row.address)}${row.address ? ` <a href="https://land.naver.com/search/index.naver?query=${encodeURIComponent(row.address)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산">N</a>` : ''}</td>
+      <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="https://land.naver.com/search/index.naver?query=${encodeURIComponent(row.address)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산">N</a> ` : ''}${esc(row.address)}</td>
       <td class="col-notes" title="${esc(row.notes)}">${esc(row.notes)}</td>
       <td class="col-del"><button class="btn-row-del" onclick="deleteOneAuction(${row.id})" title="삭제">✕</button></td>
     </tr>`;
@@ -2036,7 +2036,7 @@ function renderMyAuctionTable() {
       <td class="${profitCellClass(calcProfit(row.sale_market, row.min_price))}">${profitCellHtml(calcProfit(row.sale_market, row.min_price))}</td>
       <td class="col-floor">${row.floor != null ? row.floor + '층' : '-'}</td>
       <td class="col-area">${row.building_area != null ? row.building_area : '-'}</td>
-      <td class="col-addr" title="${esc(row.address)}">${esc(row.address)}${row.address ? ` <a href="https://land.naver.com/search/index.naver?query=${encodeURIComponent(row.address)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산">N</a>` : ''}</td>
+      <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="https://land.naver.com/search/index.naver?query=${encodeURIComponent(row.address)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산">N</a> ` : ''}${esc(row.address)}</td>
       <td class="col-notes my-editable" data-id="${row.id}" data-field="check_notes" data-val="${esc(row.check_notes || '')}" title="${esc(row.check_notes)}">${esc(row.check_notes) || '-'}</td>
       <td class="col-date">${savedDate}</td>
       <td class="col-del"><button class="btn-row-del" onclick="deleteOneMyAuction(${row.id})" title="삭제">✕</button></td>
