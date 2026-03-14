@@ -1501,21 +1501,25 @@ function esc(v) {
   return v.toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-/* 네이버 부동산 검색 URL: 주소에서 동 추출 + 물건종류 */
+/* 네이버 부동산 검색 URL: 주소에서 시·구·동 추출 + 물건종류 */
 function naverLandUrl(address, itemType) {
-  // 동 추출: "(화곡동, ...)" 괄호 패턴 우선, 없으면 주소에서 XX동 직접 추출
-  let dong = '';
-  const parenMatch = (address || '').match(/\(([^,)]+동)/);
-  if (parenMatch) {
-    dong = parenMatch[1].trim();
-  } else {
-    const dongMatch = (address || '').match(/([가-힣]+동)\b/);
-    if (dongMatch) dong = dongMatch[1];
+  const addr = (address || '');
+  let sido = '', gu = '', dong = '';
+
+  // 공백·쉼표로 분리 후 각 토큰의 한글만 추출해서 행정구역 판별
+  const tokens = addr.split(/[\s,]+/);
+  for (const token of tokens) {
+    const k = token.replace(/[^가-힣]/g, ''); // 한글만 추출
+    if (!sido && /(?:특별시|광역시|특별자치시|특별자치도|시|도)$/.test(k)) { sido = k; continue; }
+    if (!gu   && /(?:구|군)$/.test(k)) { gu = k; continue; }
+    if (!dong && /동$/.test(k))        { dong = k; continue; }
   }
+
   // 물건종류 정규화
   let type = (itemType || '').trim();
   if (/빌라|다세대/.test(type)) type = '다세대';
-  const query = [dong, type].filter(Boolean).join(' ');
+
+  const query = [sido, gu, dong, type].filter(Boolean).join(' ');
   return `https://search.naver.com/search.naver?query=${encodeURIComponent(query)}`;
 }
 
