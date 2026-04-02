@@ -829,11 +829,11 @@ app.post('/api/my-auction/refresh', async (req, res) => {
 
       // 변경 여부 비교 (null인 항목은 덮어쓰지 않음)
       const changes = {};
-      if (parsed.bid_date       && parsed.bid_date       !== auction.bid_date)       changes.bid_date        = parsed.bid_date;
-      if (parsed.min_price      && parsed.min_price      !== auction.min_price)       changes.min_price       = parsed.min_price;
-      if (parsed.official_price && parsed.official_price !== auction.official_price)  changes.official_price  = parsed.official_price;
-      if (parsed.status         && parsed.status         !== auction.status)          changes.status          = parsed.status;
-      if (parsed.winning_price  && parsed.winning_price  !== auction.winning_price)   changes.winning_price   = parsed.winning_price;
+      if (parsed.bid_date       && parsed.bid_date       !== auction.my_bid_date)     changes.my_bid_date     = parsed.bid_date;
+      if (parsed.min_price      && parsed.min_price      !== auction.min_price)        changes.min_price       = parsed.min_price;
+      if (parsed.official_price && parsed.official_price !== auction.official_price)   changes.official_price  = parsed.official_price;
+      if (parsed.status         && parsed.status         !== auction.my_status)        changes.my_status       = parsed.status;
+      if (parsed.winning_price  && parsed.winning_price  !== auction.winning_price)    changes.winning_price   = parsed.winning_price;
 
       if (Object.keys(changes).length === 0) {
         const hasData = parsed.bid_date || parsed.min_price || parsed.official_price || parsed.status;
