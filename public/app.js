@@ -2880,12 +2880,20 @@ const AUCTION_SITES = {
   bossauction: { name: '대장옥션', url: 'https://www.bossauction.co.kr/members/login.html' },
   tankauction:  { name: '탱크옥션',  url: 'https://www.tankauction.com' },
 };
+const _savedCookies = {};  // 사이트별 쿠키 저장 (세션 유지)
 
 function openRefreshModal() {
   document.getElementById('refresh-modal').style.display = 'flex';
   document.getElementById('refresh-result').style.display = 'none';
-  document.getElementById('refresh-cookie-input').value = '';
   document.getElementById('refresh-start-btn').disabled = false;
+  // 현재 선택된 사이트의 저장된 쿠키 복원
+  const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
+  if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
+}
+
+function onRefreshSiteChange() {
+  const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
+  if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
 }
 
 function closeRefreshModal() {
@@ -2905,6 +2913,7 @@ async function startDataRefresh() {
 
   if (!site)   { showToast('사이트를 선택해주세요.', 'error'); return; }
   if (!cookie) { showToast('쿠키 값을 입력해주세요.', 'error'); return; }
+  _savedCookies[site] = cookie;  // 입력값 저장
 
   const btn = document.getElementById('refresh-start-btn');
   btn.disabled = true;
