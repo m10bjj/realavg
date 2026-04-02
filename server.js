@@ -829,14 +829,16 @@ app.post('/api/my-auction/refresh', async (req, res) => {
 
       // 변경 여부 비교 (null인 항목은 덮어쓰지 않음)
       const changes = {};
-      if (parsed.bid_date      && parsed.bid_date      !== auction.my_bid_date)     changes.my_bid_date     = parsed.bid_date;
-      if (parsed.min_price     && parsed.min_price     !== auction.min_price)        changes.min_price       = parsed.min_price;
-      if (parsed.official_price && parsed.official_price !== auction.official_price) changes.official_price  = parsed.official_price;
+      if (parsed.bid_date       && parsed.bid_date       !== auction.bid_date)       changes.bid_date        = parsed.bid_date;
+      if (parsed.min_price      && parsed.min_price      !== auction.min_price)       changes.min_price       = parsed.min_price;
+      if (parsed.official_price && parsed.official_price !== auction.official_price)  changes.official_price  = parsed.official_price;
+      if (parsed.status         && parsed.status         !== auction.status)          changes.status          = parsed.status;
+      if (parsed.winning_price  && parsed.winning_price  !== auction.winning_price)   changes.winning_price   = parsed.winning_price;
 
       if (Object.keys(changes).length === 0) {
-        const hasData = parsed.bid_date || parsed.min_price || parsed.official_price;
+        const hasData = parsed.bid_date || parsed.min_price || parsed.official_price || parsed.status;
         const found = hasData
-          ? `변동 없음 (입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'})`
+          ? `변동 없음 (상태:${parsed.status||'-'} 입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'})`
           : '데이터 미확인 (로그인 필요 또는 URL 확인 필요)';
         details.push({ case_no: auction.case_no, msg: found });
         if (!hasData) failed++; else skipped++;
@@ -867,23 +869,66 @@ function parseAuctionHtml(html, site) {
     const minM  = html.match(/최저가[^\d]*([\d,]+)/);
     // 감정가: "감정가&nbsp;188,000,000" 또는 "감정가 188,000,000" 형태
     const gamM  = html.match(/감정가[^\d]*([\d,]+)/);
+    // 낙찰가: "낙찰가 145,000,000" 형태 (낙찰 시에만 존재)
+    const wonM  = html.match(/낙찰가[^\d]*([\d,]+)/);
+
+    // 상태 파싱: 우선순위 순으로 체크
+    let status = null;
+    if      (/낙찰/.test(html))    status = '낙찰';
+    else if (/취하/.test(html))    status = '취하';
+    else if (/기각/.test(html))    status = '기각';
+    else if (/정지/.test(html))    status = '정지';
+    else if (/불허가/.test(html))  status = '불허가';
+    else if (/배당종결/.test(html)) status = '배당종결';
+    else if (/미진행/.test(html))  status = '미진행';
+    else if (/변경/.test(html))    status = '변경';
+    else {
+      // 유찰 N회
+      const yuchalM = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
+      if (yuchalM)            status = `유찰${yuchalM[1]}회`;
+      else if (/유찰/.test(html)) status = '유찰';
+      else if (/신건/.test(html)) status = '신건';
+      else if (/진행물건|진행중/.test(html)) status = '진행중';
+    }
 
     return {
       bid_date:       dateM ? dateM[1] : null,
       min_price:      minM  ? toMan(minM[1])  : null,
       official_price: gamM  ? toMan(gamM[1])  : null,
+      winning_price:  wonM  ? toMan(wonM[1])  : null,
+      status,
     };
   }
 
-  // ── 탱크옥션 파싱 (URL 확인 후 개선 예정) ──
+  // ── 탱크옥션 파싱 ──
   const dateM = html.match(/매각기일[\s\S]{0,60}?(\d{4}[.\-]\d{2}[.\-]\d{2})/);
   const minM  = html.match(/최저[가매][각]?\s*가격?[：:\s]*([\d,]+)/);
   const offM  = html.match(/공시[가격]{0,3}[：:\s]*([\d,]+)/);
+  const wonM  = html.match(/낙찰가[^\d]*([\d,]+)/);
+
+  let status = null;
+  if      (/낙찰/.test(html))     status = '낙찰';
+  else if (/취하/.test(html))     status = '취하';
+  else if (/기각/.test(html))     status = '기각';
+  else if (/정지/.test(html))     status = '정지';
+  else if (/불허가/.test(html))   status = '불허가';
+  else if (/배당종결/.test(html)) status = '배당종결';
+  else if (/미진행/.test(html))   status = '미진행';
+  else if (/변경/.test(html))     status = '변경';
+  else {
+    const yuchalM = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
+    if (yuchalM)                status = `유찰${yuchalM[1]}회`;
+    else if (/유찰/.test(html)) status = '유찰';
+    else if (/신건/.test(html)) status = '신건';
+    else if (/진행물건|진행중/.test(html)) status = '진행중';
+  }
 
   return {
     bid_date:       dateM ? dateM[1].replace(/\./g, '-') : null,
     min_price:      minM  ? toMan(minM[1])  : null,
     official_price: offM  ? toMan(offM[1])  : null,
+    winning_price:  wonM  ? toMan(wonM[1])  : null,
+    status,
   };
 }
 
