@@ -759,25 +759,43 @@ app.post('/api/my-auction/refresh', async (req, res) => {
   const { site, cookie } = req.body;
   if (!site || !cookie) return res.status(400).json({ error: '사이트와 쿠키가 필요합니다.' });
 
+  /** 경매사건번호 → syear / sno 분리: "2024타경534078" → { syear:'2024', sno:'534078' } */
+  function parseCaseNo(caseNo) {
+    const m = (caseNo || '').match(/(\d{4})[^\d]*(\d+)/);
+    if (!m) return null;
+    return { syear: m[1], sno: m[2] };
+  }
+
   const SITE_CFG = {
     bossauction: {
       host:      'https://www.bossauction.co.kr',
-      searchUrl: (caseNo) => `https://www.bossauction.co.kr/auction/search.html?searchWord=${encodeURIComponent(caseNo)}`,
+      searchUrl: (caseNo) => {
+        const p = parseCaseNo(caseNo);
+        if (!p) return null;
+        return `https://www.bossauction.co.kr/auction/list_pub.html?page=1&listnum=0&syear=${p.syear}&sno=${p.sno}`;
+      },
     },
     tankauction: {
       host:      'https://www.tankauction.com',
-      searchUrl: (caseNo) => `https://www.tankauction.com/ca/caList.php?searchTxt=${encodeURIComponent(caseNo)}`,
+      searchUrl: (caseNo) => {
+        const p = parseCaseNo(caseNo);
+        if (!p) return null;
+        return `https://www.tankauction.com/ca/caList.php?searchTxt=${encodeURIComponent(caseNo)}`;
+      },
     },
   };
 
   const cfg = SITE_CFG[site];
   if (!cfg) return res.status(400).json({ error: '지원하지 않는 사이트입니다.' });
 
+  // 쿠키값 전처리: "PHPSESSID=abc123" 형태로 들어오면 그대로 사용, 값만 오면 감싸기
+  const cookieHeader = cookie.includes('=') ? cookie : `PHPSESSID=${cookie}`;
+
   const headers = {
-    'Cookie':     `PHPSESSID=${cookie}`,
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0',
-    'Referer':    cfg.host,
-    'Accept':     'text/html,application/xhtml+xml',
+    'Cookie':          cookieHeader,
+    'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0',
+    'Referer':         cfg.host,
+    'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'ko-KR,ko;q=0.9',
   };
 
@@ -793,36 +811,36 @@ app.post('/api/my-auction/refresh', async (req, res) => {
 
   for (const auction of targets) {
     try {
-      const url  = cfg.searchUrl(auction.case_no);
-      const resp = await axios.get(url, { headers, timeout: 15000, maxRedirects: 5 });
-      const html = resp.data;
+      const url = cfg.searchUrl(auction.case_no);
+      if (!url) {
+        details.push({ case_no: auction.case_no, msg: '사건번호 형식 오류' });
+        failed++; continue;
+      }
+
+      const resp = await axios.get(url, { headers, timeout: 20000, maxRedirects: 5 });
+      const html = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
 
       // 로그인 세션 만료 감지
-      if (typeof html === 'string' && (html.includes('로그인') && html.includes('login')) && !html.includes('경매')) {
+      if (html.includes('로그인을 해주세요') || html.includes('login.html') && !html.includes('매각기일')) {
         return res.status(401).json({ error: '세션이 만료되었습니다. 쿠키를 다시 입력해주세요.' });
       }
 
       const parsed = parseAuctionHtml(html, site);
 
-      if (!parsed) {
-        details.push({ case_no: auction.case_no, msg: '데이터 파싱 실패 (URL 패턴 확인 필요)' });
-        failed++;
-        continue;
-      }
-
-      // 변경 여부 비교
+      // 변경 여부 비교 (null인 항목은 덮어쓰지 않음)
       const changes = {};
-      if (parsed.bid_date    && parsed.bid_date    !== auction.my_bid_date)  changes.my_bid_date = parsed.bid_date;
-      if (parsed.min_price   && parsed.min_price   !== auction.min_price)    changes.min_price   = parsed.min_price;
-      if (parsed.official_price && parsed.official_price !== auction.official_price) changes.official_price = parsed.official_price;
+      if (parsed.bid_date      && parsed.bid_date      !== auction.my_bid_date)     changes.my_bid_date     = parsed.bid_date;
+      if (parsed.min_price     && parsed.min_price     !== auction.min_price)        changes.min_price       = parsed.min_price;
+      if (parsed.official_price && parsed.official_price !== auction.official_price) changes.official_price  = parsed.official_price;
 
       if (Object.keys(changes).length === 0) {
-        details.push({ case_no: auction.case_no, msg: '변동 없음' });
-        skipped++;
+        const found = parsed.bid_date || parsed.min_price ? '변동 없음' : '데이터 미확인 (로그인 필요 또는 URL 확인 필요)';
+        details.push({ case_no: auction.case_no, msg: found });
+        if (!parsed.bid_date && !parsed.min_price) failed++; else skipped++;
       } else {
         await db.updateMyAuction(auction.id, changes);
-        const changeDesc = Object.keys(changes).join(', ');
-        details.push({ case_no: auction.case_no, msg: `업데이트: ${changeDesc}` });
+        const desc = Object.entries(changes).map(([k,v]) => `${k}=${v}`).join(', ');
+        details.push({ case_no: auction.case_no, msg: `업데이트: ${desc}` });
         updated++;
       }
     } catch (e) {
@@ -834,23 +852,35 @@ app.post('/api/my-auction/refresh', async (req, res) => {
   res.json({ updated, skipped, failed, details });
 });
 
-/** HTML에서 입찰일·최저가·공시가 파싱 (사이트별) */
+/** HTML에서 입찰일·최저가·공시가 파싱 */
 function parseAuctionHtml(html, site) {
-  if (typeof html !== 'string') return null;
-
-  // 최저가: 숫자+원 패턴
-  const minPriceMatch = html.match(/최저[가매][\s\S]{0,30}?([\d,]+)\s*원/);
-  // 공시가: 공시가격 or 공시지가
-  const officialMatch = html.match(/공시[가지][가격]{0,2}[\s\S]{0,30}?([\d,]+)\s*원/);
-  // 입찰일: YYYY-MM-DD 또는 YYYY.MM.DD 형태
-  const dateMatch = html.match(/매각기일[\s\S]{0,50}?(\d{4}[.\-]\d{2}[.\-]\d{2})/);
-
   const toMan = (str) => str ? Math.round(parseInt(str.replace(/,/g, ''), 10) / 10000) : null;
 
+  // ── 대장옥션 파싱 ──
+  if (site === 'bossauction') {
+    // 매각기일: "2026-04-14 (10:00)" 형태
+    const dateM = html.match(/(\d{4}-\d{2}-\d{2})\s*\([\d:]+\)/);
+    // 최저가: "최저가 131,600,000" 형태 (원 단위)
+    const minM  = html.match(/최저가\s+([\d,]+)/);
+    // 감정가: "감정가 188,000,000" 형태
+    const gamM  = html.match(/감정가\s+([\d,]+)/);
+
+    return {
+      bid_date:       dateM ? dateM[1] : null,
+      min_price:      minM  ? toMan(minM[1])  : null,
+      official_price: gamM  ? toMan(gamM[1])  : null,  // 대장옥션은 감정가를 공시가로 매핑
+    };
+  }
+
+  // ── 탱크옥션 파싱 (URL 확인 후 개선 예정) ──
+  const dateM = html.match(/매각기일[\s\S]{0,60}?(\d{4}[.\-]\d{2}[.\-]\d{2})/);
+  const minM  = html.match(/최저[가매][각]?\s*가격?[：:\s]*([\d,]+)/);
+  const offM  = html.match(/공시[가격]{0,3}[：:\s]*([\d,]+)/);
+
   return {
-    bid_date:       dateMatch    ? dateMatch[1].replace(/\./g, '-') : null,
-    min_price:      minPriceMatch ? toMan(minPriceMatch[1]) : null,
-    official_price: officialMatch ? toMan(officialMatch[1]) : null,
+    bid_date:       dateM ? dateM[1].replace(/\./g, '-') : null,
+    min_price:      minM  ? toMan(minM[1])  : null,
+    official_price: offM  ? toMan(offM[1])  : null,
   };
 }
 
