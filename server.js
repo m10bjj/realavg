@@ -838,8 +838,8 @@ app.post('/api/my-auction/refresh', async (req, res) => {
       if (Object.keys(changes).length === 0) {
         const hasData = parsed.bid_date || parsed.min_price || parsed.official_price || parsed.status;
         const found = hasData
-          ? `변동 없음 (상태:${parsed.status||'-'} 입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'})`
-          : '데이터 미확인 (로그인 필요 또는 URL 확인 필요)';
+          ? `변동 없음 (상태:${parsed.status||'-'} 입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'} 낙찰가:${parsed.winning_price||'-'})`
+          : `데이터 미확인 - 파싱결과: 상태=${parsed.status} 입찰일=${parsed.bid_date} 최저가=${parsed.min_price} 낙찰가=${parsed.winning_price}`;
         details.push({ case_no: auction.case_no, msg: found });
         if (!hasData) failed++; else skipped++;
       } else {
@@ -872,25 +872,24 @@ function parseAuctionHtml(html, site) {
     // 낙찰가: "낙찰가 145,000,000" 형태 (낙찰 시에만 존재)
     const wonM  = html.match(/낙찰가[^\d]*([\d,]+)/);
 
-    // 상태 파싱: 낙찰가 존재 여부가 가장 확실한 기준
+    // 상태 파싱: 낙찰가 존재 또는 "매각" 텍스트 → 낙찰 (유찰 이력 무시)
     let status = null;
-    if (wonM) {
-      // 낙찰가가 숫자로 표시되면 → 무조건 낙찰 (유찰 이력이 있어도)
+    if (wonM || /매각/.test(html)) {
       status = '낙찰';
     } else {
       const yuchalM = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
-      if (yuchalM)                         { status = `유찰${yuchalM[1]}회`; }
-      else if (/유찰/.test(html))          { status = '유찰';    }
-      else if (/취하/.test(html))          { status = '취하';    }
-      else if (/기각/.test(html))          { status = '기각';    }
-      else if (/정지/.test(html))          { status = '정지';    }
-      else if (/불허가/.test(html))        { status = '불허가';  }
-      else if (/배당종결/.test(html))      { status = '배당종결';}
-      else if (/미진행/.test(html))        { status = '미진행';  }
-      else if (/변경/.test(html))          { status = '변경';    }
-      else if (/낙찰/.test(html))          { status = '낙찰';    }
-      else if (/신건/.test(html))          { status = '신건';    }
-      else if (/진행물건|진행중/.test(html)) { status = '진행중'; }
+      if (yuchalM)                           { status = `유찰${yuchalM[1]}회`; }
+      else if (/유찰/.test(html))            { status = '유찰';    }
+      else if (/취하/.test(html))            { status = '취하';    }
+      else if (/기각/.test(html))            { status = '기각';    }
+      else if (/정지/.test(html))            { status = '정지';    }
+      else if (/불허가/.test(html))          { status = '불허가';  }
+      else if (/배당종결/.test(html))        { status = '배당종결';}
+      else if (/미진행/.test(html))          { status = '미진행';  }
+      else if (/변경/.test(html))            { status = '변경';    }
+      else if (/낙찰/.test(html))            { status = '낙찰';    }
+      else if (/신건/.test(html))            { status = '신건';    }
+      else if (/진행물건|진행중/.test(html)) { status = '진행중';  }
     }
 
     return {
@@ -909,7 +908,7 @@ function parseAuctionHtml(html, site) {
   const wonM  = html.match(/낙찰가[^\d]*([\d,]+)/);
 
   let status = null;
-  if (wonM) {
+  if (wonM || /매각/.test(html)) {
     status = '낙찰';
   } else {
     const yuchalMT = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
