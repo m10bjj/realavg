@@ -834,9 +834,12 @@ app.post('/api/my-auction/refresh', async (req, res) => {
       if (parsed.official_price && parsed.official_price !== auction.official_price) changes.official_price  = parsed.official_price;
 
       if (Object.keys(changes).length === 0) {
-        const found = parsed.bid_date || parsed.min_price ? '변동 없음' : '데이터 미확인 (로그인 필요 또는 URL 확인 필요)';
+        const hasData = parsed.bid_date || parsed.min_price || parsed.official_price;
+        const found = hasData
+          ? `변동 없음 (입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'})`
+          : '데이터 미확인 (로그인 필요 또는 URL 확인 필요)';
         details.push({ case_no: auction.case_no, msg: found });
-        if (!parsed.bid_date && !parsed.min_price) failed++; else skipped++;
+        if (!hasData) failed++; else skipped++;
       } else {
         await db.updateMyAuction(auction.id, changes);
         const desc = Object.entries(changes).map(([k,v]) => `${k}=${v}`).join(', ');
@@ -858,17 +861,17 @@ function parseAuctionHtml(html, site) {
 
   // ── 대장옥션 파싱 ──
   if (site === 'bossauction') {
-    // 매각기일: "2026-04-14 (10:00)" 형태
-    const dateM = html.match(/(\d{4}-\d{2}-\d{2})\s*\([\d:]+\)/);
-    // 최저가: "최저가 131,600,000" 형태 (원 단위)
-    const minM  = html.match(/최저가\s+([\d,]+)/);
-    // 감정가: "감정가 188,000,000" 형태
-    const gamM  = html.match(/감정가\s+([\d,]+)/);
+    // 매각기일: "2026-04-14<br/>(10:00)" 또는 "2026-04-14 (10:00)" 형태
+    const dateM = html.match(/(\d{4}-\d{2}-\d{2})(?:<br\s*\/?>|\s)*\([\d:]+\)/);
+    // 최저가: "최저가&nbsp;131,600,000" 또는 "최저가 131,600,000" 형태
+    const minM  = html.match(/최저가[^\d]*([\d,]+)/);
+    // 감정가: "감정가&nbsp;188,000,000" 또는 "감정가 188,000,000" 형태
+    const gamM  = html.match(/감정가[^\d]*([\d,]+)/);
 
     return {
       bid_date:       dateM ? dateM[1] : null,
       min_price:      minM  ? toMan(minM[1])  : null,
-      official_price: gamM  ? toMan(gamM[1])  : null,  // 대장옥션은 감정가를 공시가로 매핑
+      official_price: gamM  ? toMan(gamM[1])  : null,
     };
   }
 
