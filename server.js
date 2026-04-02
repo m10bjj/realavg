@@ -754,6 +754,106 @@ app.get('/api/my-auction', async (_req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* POST /api/my-auction/refresh – 경매사이트 세션으로 데이터 갱신 */
+app.post('/api/my-auction/refresh', async (req, res) => {
+  const { site, cookie } = req.body;
+  if (!site || !cookie) return res.status(400).json({ error: '사이트와 쿠키가 필요합니다.' });
+
+  const SITE_CFG = {
+    bossauction: {
+      host:      'https://www.bossauction.co.kr',
+      searchUrl: (caseNo) => `https://www.bossauction.co.kr/auction/search.html?searchWord=${encodeURIComponent(caseNo)}`,
+    },
+    tankauction: {
+      host:      'https://www.tankauction.com',
+      searchUrl: (caseNo) => `https://www.tankauction.com/ca/caList.php?searchTxt=${encodeURIComponent(caseNo)}`,
+    },
+  };
+
+  const cfg = SITE_CFG[site];
+  if (!cfg) return res.status(400).json({ error: '지원하지 않는 사이트입니다.' });
+
+  const headers = {
+    'Cookie':     `PHPSESSID=${cookie}`,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0',
+    'Referer':    cfg.host,
+    'Accept':     'text/html,application/xhtml+xml',
+    'Accept-Language': 'ko-KR,ko;q=0.9',
+  };
+
+  let auctions;
+  try { auctions = await db.getMyAuctions(); }
+  catch (e) { return res.status(500).json({ error: 'DB 조회 실패: ' + e.message }); }
+
+  const targets = auctions.filter(a => a.case_no);
+  if (!targets.length) return res.json({ updated: 0, skipped: 0, failed: 0, details: [] });
+
+  let updated = 0, skipped = 0, failed = 0;
+  const details = [];
+
+  for (const auction of targets) {
+    try {
+      const url  = cfg.searchUrl(auction.case_no);
+      const resp = await axios.get(url, { headers, timeout: 15000, maxRedirects: 5 });
+      const html = resp.data;
+
+      // 로그인 세션 만료 감지
+      if (typeof html === 'string' && (html.includes('로그인') && html.includes('login')) && !html.includes('경매')) {
+        return res.status(401).json({ error: '세션이 만료되었습니다. 쿠키를 다시 입력해주세요.' });
+      }
+
+      const parsed = parseAuctionHtml(html, site);
+
+      if (!parsed) {
+        details.push({ case_no: auction.case_no, msg: '데이터 파싱 실패 (URL 패턴 확인 필요)' });
+        failed++;
+        continue;
+      }
+
+      // 변경 여부 비교
+      const changes = {};
+      if (parsed.bid_date    && parsed.bid_date    !== auction.my_bid_date)  changes.my_bid_date = parsed.bid_date;
+      if (parsed.min_price   && parsed.min_price   !== auction.min_price)    changes.min_price   = parsed.min_price;
+      if (parsed.official_price && parsed.official_price !== auction.official_price) changes.official_price = parsed.official_price;
+
+      if (Object.keys(changes).length === 0) {
+        details.push({ case_no: auction.case_no, msg: '변동 없음' });
+        skipped++;
+      } else {
+        await db.updateMyAuction(auction.id, changes);
+        const changeDesc = Object.keys(changes).join(', ');
+        details.push({ case_no: auction.case_no, msg: `업데이트: ${changeDesc}` });
+        updated++;
+      }
+    } catch (e) {
+      details.push({ case_no: auction.case_no, msg: `오류: ${e.message}` });
+      failed++;
+    }
+  }
+
+  res.json({ updated, skipped, failed, details });
+});
+
+/** HTML에서 입찰일·최저가·공시가 파싱 (사이트별) */
+function parseAuctionHtml(html, site) {
+  if (typeof html !== 'string') return null;
+
+  // 최저가: 숫자+원 패턴
+  const minPriceMatch = html.match(/최저[가매][\s\S]{0,30}?([\d,]+)\s*원/);
+  // 공시가: 공시가격 or 공시지가
+  const officialMatch = html.match(/공시[가지][가격]{0,2}[\s\S]{0,30}?([\d,]+)\s*원/);
+  // 입찰일: YYYY-MM-DD 또는 YYYY.MM.DD 형태
+  const dateMatch = html.match(/매각기일[\s\S]{0,50}?(\d{4}[.\-]\d{2}[.\-]\d{2})/);
+
+  const toMan = (str) => str ? Math.round(parseInt(str.replace(/,/g, ''), 10) / 10000) : null;
+
+  return {
+    bid_date:       dateMatch    ? dateMatch[1].replace(/\./g, '-') : null,
+    min_price:      minPriceMatch ? toMan(minPriceMatch[1]) : null,
+    official_price: officialMatch ? toMan(officialMatch[1]) : null,
+  };
+}
+
 /* POST /api/my-auction – 선택한 경매물건 스냅샷 저장 */
 app.post('/api/my-auction', async (req, res) => {
   const { items } = req.body;

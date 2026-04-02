@@ -2873,6 +2873,78 @@ function autoCalcTransferTax() {
   if (trEl) { trEl.dataset.raw = taxWon; trEl.value = taxWon.toLocaleString() + '원'; }
 }
 
+/* ═══════════════════════════════════════════════════════
+   데이터 갱신 모달
+═══════════════════════════════════════════════════════ */
+const AUCTION_SITES = {
+  bossauction: { name: '대장옥션', url: 'https://www.bossauction.co.kr/members/login.html' },
+  tankauction:  { name: '탱크옥션',  url: 'https://www.tankauction.com' },
+};
+
+function openRefreshModal() {
+  document.getElementById('refresh-modal').style.display = 'flex';
+  document.getElementById('refresh-result').style.display = 'none';
+  document.getElementById('refresh-cookie-input').value = '';
+  document.getElementById('refresh-start-btn').disabled = false;
+}
+
+function closeRefreshModal() {
+  document.getElementById('refresh-modal').style.display = 'none';
+}
+
+function openAuctionLoginWindow() {
+  const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
+  if (!site) return;
+  window.open(AUCTION_SITES[site].url, '_blank', 'width=1100,height=800');
+}
+
+async function startDataRefresh() {
+  const site   = document.querySelector('input[name="refresh-site"]:checked')?.value;
+  const cookie = document.getElementById('refresh-cookie-input').value.trim();
+  const result = document.getElementById('refresh-result');
+
+  if (!site)   { showToast('사이트를 선택해주세요.', 'error'); return; }
+  if (!cookie) { showToast('쿠키 값을 입력해주세요.', 'error'); return; }
+
+  const btn = document.getElementById('refresh-start-btn');
+  btn.disabled = true;
+  btn.textContent = '갱신 중…';
+  result.style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/my-auction/refresh', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ site, cookie }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || '서버 오류');
+
+    const { updated, skipped, failed, details } = data;
+    result.className = 'refresh-result refresh-result--success';
+    result.innerHTML = `
+      <strong>갱신 완료</strong><br>
+      ✅ 업데이트: ${updated}건 &nbsp;
+      ⏭ 변동없음: ${skipped}건 &nbsp;
+      ❌ 실패: ${failed}건
+      ${details?.length ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px">상세 내역</summary>
+        <div style="margin-top:6px;font-size:12px;max-height:180px;overflow-y:auto">
+          ${details.map(d => `<div>${d.case_no}: ${d.msg}</div>`).join('')}
+        </div></details>` : ''}
+    `;
+    result.style.display = '';
+    loadMyAuctions(); // 테이블 새로고침
+  } catch (e) {
+    result.className = 'refresh-result refresh-result--error';
+    result.innerHTML = `<strong>오류</strong><br>${e.message}`;
+    result.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '갱신 시작';
+  }
+}
+
 /* ── 모달 열기 ── */
 async function openProfitModal(myAuctionId) {
   profitItem = myAuctionData.find(r => r.id === myAuctionId) ||
