@@ -872,9 +872,9 @@ function parseAuctionHtml(html, site) {
     // 낙찰가: "낙찰가 145,000,000" 형태 (낙찰 시에만 존재)
     const wonM  = html.match(/낙찰가[^\d]*([\d,]+)/);
 
-    // 상태 파싱: 낙찰가 또는 "매각" → 매각, 유찰 이력보다 우선
+    // 상태 파싱: 낙찰가(숫자) 존재 → 매각, 유찰 이력보다 우선
     let status = null;
-    if (wonM || /매각/.test(html)) {
+    if (wonM) {
       status = '매각';
     } else {
       const yuchalM = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
@@ -908,7 +908,7 @@ function parseAuctionHtml(html, site) {
   const wonM  = html.match(/낙찰가[^\d]*([\d,]+)/);
 
   let status = null;
-  if (wonM || /매각/.test(html)) {
+  if (wonM) {
     status = '매각';
   } else {
     const yuchalMT = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
