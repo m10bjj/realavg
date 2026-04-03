@@ -1940,13 +1940,42 @@ const isMyAuctionSold = r => SOLD_STATUSES.has(r.my_status);
 
 function updateMyAuctionStatusOptions(tab) {
   const sel = document.getElementById('maf-status');
-  if (!sel) return;
-  const prev = sel.value;
-  const opts = tab === 'active'
-    ? [['', '전체'], ['진행중', '진행중'], ['유찰', '유찰']]
-    : [['', '전체'], ['낙찰', '낙찰'], ['변경/낙찰', '변경/낙찰'], ['매각', '매각'], ['취하', '취하'], ['기각', '기각'], ['정지', '정지'], ['불허가', '불허가']];
-  sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
-  sel.value = opts.some(([v]) => v === prev) ? prev : '';
+  if (sel) {
+    const prev = sel.value;
+    const opts = tab === 'active'
+      ? [['', '전체'], ['진행중', '진행중'], ['유찰', '유찰']]
+      : [['', '전체'], ['낙찰', '낙찰'], ['변경/낙찰', '변경/낙찰'], ['매각', '매각'], ['취하', '취하'], ['기각', '기각'], ['정지', '정지'], ['불허가', '불허가']];
+    sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+    sel.value = opts.some(([v]) => v === prev) ? prev : '';
+  }
+  // 탭별 가격 필터 표시/숨김 + 전환 시 값 초기화
+  const minSection = document.getElementById('maf-section-min-price');
+  const winSection = document.getElementById('maf-section-win-price');
+  if (minSection) minSection.style.display = tab === 'active' ? '' : 'none';
+  if (winSection) winSection.style.display = tab === 'sold'   ? '' : 'none';
+  if (tab === 'active') {
+    ['maf-win-from', 'maf-win-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  } else {
+    ['maf-min-from', 'maf-min-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  }
+}
+
+/* 물건종류·지역 드롭다운을 실제 데이터 기준으로 동적 생성 */
+function updateMyAuctionDynamicOptions() {
+  const itemTypes = [...new Set(myAuctionData.map(r => r.item_type).filter(Boolean))].sort();
+  const regions   = [...new Set(myAuctionData.map(r => r.region).filter(Boolean))].sort();
+  const itSel = document.getElementById('maf-item-type');
+  const rgSel = document.getElementById('maf-region');
+  if (itSel) {
+    const prev = itSel.value;
+    itSel.innerHTML = '<option value="">전체</option>' + itemTypes.map(v => `<option value="${v}">${v}</option>`).join('');
+    if (itemTypes.includes(prev)) itSel.value = prev;
+  }
+  if (rgSel) {
+    const prev = rgSel.value;
+    rgSel.innerHTML = '<option value="">전체</option>' + regions.map(v => `<option value="${v}">${v}</option>`).join('');
+    if (regions.includes(prev)) rgSel.value = prev;
+  }
 }
 
 function setMyAuctionTab(tab) {
@@ -1990,6 +2019,7 @@ async function loadMyAuctions() {
   }
   myAuctionData.forEach((r, i) => { r._seq = i + 1; });
   myAuctionSelected.clear();
+  updateMyAuctionDynamicOptions();
   updateMyAuctionStatusOptions(myAuctionTab);
   applyMyAuctionFilter();
 }
@@ -2010,19 +2040,42 @@ function applyMyAuctionFilter() {
   );
 
   // 사이드바 필터 적용
-  const status  = document.getElementById('maf-status')?.value   || '';
-  const bidFrom = document.getElementById('maf-bid-from')?.value || '';
-  const bidTo   = document.getElementById('maf-bid-to')?.value   || '';
+  const gv = id => document.getElementById(id)?.value || '';
+  const gn = id => { const v = document.getElementById(id)?.value; return v !== '' && v != null ? parseFloat(v) : null; };
+
+  const search   = gv('maf-search').trim().toLowerCase();
+  const itemType = gv('maf-item-type');
+  const region   = gv('maf-region');
+  const status   = gv('maf-status');
+  const areaFrom = gn('maf-area-from');
+  const areaTo   = gn('maf-area-to');
+  const bidFrom  = gv('maf-bid-from');
+  const bidTo    = gv('maf-bid-to');
+  const minFrom  = gn('maf-min-from');
+  const minTo    = gn('maf-min-to');
+  const winFrom  = gn('maf-win-from');
+  const winTo    = gn('maf-win-to');
 
   myAuctionFiltered = base.filter(r => {
+    if (search   && !(r.case_no || '').toLowerCase().includes(search)) return false;
+    if (itemType && r.item_type !== itemType) return false;
+    if (region   && r.region   !== region)   return false;
     if (status) {
       const s = r.my_status || '';
-      const match = status === '유찰' ? s.startsWith('유찰') : s === status;
-      if (!match) return false;
+      if (!(status === '유찰' ? s.startsWith('유찰') : s === status)) return false;
     }
+    if (areaFrom !== null && (r.building_area == null || r.building_area < areaFrom)) return false;
+    if (areaTo   !== null && (r.building_area == null || r.building_area > areaTo))   return false;
     const d = r.my_bid_date || r.bid_date || '';
     if (bidFrom && (!d || d < bidFrom)) return false;
     if (bidTo   && (!d || d > bidTo))   return false;
+    if (myAuctionTab === 'active') {
+      if (minFrom !== null && (r.min_price == null || r.min_price < minFrom)) return false;
+      if (minTo   !== null && (r.min_price == null || r.min_price > minTo))   return false;
+    } else {
+      if (winFrom !== null && (r.winning_price == null || r.winning_price < winFrom)) return false;
+      if (winTo   !== null && (r.winning_price == null || r.winning_price > winTo))   return false;
+    }
     return true;
   });
 
@@ -2038,10 +2091,10 @@ function applyMyAuctionFilter() {
 }
 
 function resetMyAuctionFilter() {
-  ['maf-status', 'maf-bid-from', 'maf-bid-to'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
+  ['maf-search', 'maf-item-type', 'maf-region', 'maf-status',
+   'maf-area-from', 'maf-area-to', 'maf-bid-from', 'maf-bid-to',
+   'maf-min-from', 'maf-min-to', 'maf-win-from', 'maf-win-to']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   applyMyAuctionFilter();
 }
 
