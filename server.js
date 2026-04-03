@@ -766,13 +766,36 @@ app.post('/api/my-auction/refresh', async (req, res) => {
     return { syear: m[1], sno: m[2] };
   }
 
+  /** item_type → 대장옥션 yongdo 코드 매핑 */
+  const YONGDO_MAP = {
+    '아파트': '01', '다세대': '02', '다세대(빌라)': '02', '빌라': '02',
+    '주택': '03', '단독주택': '03', '근린주택': '05',
+    '다가구': '06', '다가구(원룸등)': '06', '원룸': '06',
+    '도시형생활주택': '07',
+    '근린상가': '11', '공장': '12', '오피스텔': '13', '근린시설': '14',
+    '숙박시설': '15', '창고': '16', '아파트형공장': '17', '주유소': '18',
+    '목욕탕': '19', '의료시설': '20', '노유자시설': '21', '사무실': '22',
+    '자동차관련시설': '23', '장례관련시설': '24', '문화및집회시설': '25',
+    '농지': '31', '임야': '33', '대지': '34', '도로': '35', '잡종지': '36',
+    '과수원': '37', '목장용지': '38', '공장용지': '39', '유지': '40',
+    '구거': '41', '하천': '42', '제방': '43', '기타용지': '44',
+    '창고용지': '45', '학교용지': '46', '체육용지': '47', '종교용지': '48',
+    '숙박(콘도등)': '52', '묘지': '53', '주차장': '55', '교육시설': '56',
+    '어업권': '57', '광업권': '58', '염전': '59', '양어장': '60',
+    '승용자동차': '71', 'SUV': '72', '승합자동차': '73', '화물자동차': '74',
+    '중장비': '75', '덤프트럭': '76', '선박': '78', '항공기': '79',
+  };
+  const toYongdo = (itemType) => YONGDO_MAP[(itemType || '').trim()] || '';
+
   const SITE_CFG = {
     bossauction: {
       host:      'https://www.bossauction.co.kr',
-      searchUrl: (caseNo) => {
+      searchUrl: (caseNo, itemType) => {
         const p = parseCaseNo(caseNo);
         if (!p) return null;
-        return `https://www.bossauction.co.kr/auction/list_pub.html?page=1&listnum=0&syear=${p.syear}&sno=${p.sno}`;
+        const yongdo = toYongdo(itemType);
+        const ydParam = yongdo ? `&yongdo=${yongdo}` : '';
+        return `https://www.bossauction.co.kr/auction/list_pub.html?page=1&listnum=0&syear=${p.syear}&sno=${p.sno}${ydParam}`;
       },
     },
     tankauction: {
@@ -811,7 +834,7 @@ app.post('/api/my-auction/refresh', async (req, res) => {
 
   for (const auction of targets) {
     try {
-      const url = cfg.searchUrl(auction.case_no);
+      const url = cfg.searchUrl(auction.case_no, auction.item_type);
       if (!url) {
         details.push({ case_no: auction.case_no, msg: '사건번호 형식 오류' });
         failed++; continue;
