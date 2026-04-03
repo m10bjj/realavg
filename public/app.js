@@ -1195,6 +1195,30 @@ let auctionFiltered = [];
 let auctionSelected = new Set();
 let auctionPage     = 1;
 let auctionPageSize = 30;
+let auctionTab      = 'active'; // 'active' | 'sold'
+
+const isAuctionSold = r => SOLD_STATUSES.has(r.status);
+
+function updateAuctionStatusOptions(tab) {
+  const sel = document.getElementById('af-status');
+  if (!sel) return;
+  const prev = sel.value;
+  const opts = tab === 'active'
+    ? [['', '전체'], ['신건', '신건'], ['진행중', '진행중'], ['유찰', '유찰']]
+    : [['', '전체'], ['낙찰', '낙찰'], ['변경/낙찰', '변경/낙찰'], ['매각', '매각'], ['취하', '취하'], ['기각', '기각'], ['정지', '정지'], ['불허가', '불허가']];
+  sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  sel.value = opts.some(([v]) => v === prev) ? prev : '';
+}
+
+function setAuctionTab(tab) {
+  auctionTab = tab;
+  auctionSelected.clear();
+  auctionPage = 1;
+  document.getElementById('at-tab-active').classList.toggle('is-active', tab === 'active');
+  document.getElementById('at-tab-sold').classList.toggle('is-active', tab === 'sold');
+  updateAuctionStatusOptions(tab);
+  applyAuctionFilter();
+}
 
 async function loadAuctions() {
   try {
@@ -1208,6 +1232,7 @@ async function loadAuctions() {
   auctionData.forEach((r, i) => { r._seq = i + 1; });
   auctionSelected.clear();
   populateAuctionFilters();
+  updateAuctionStatusOptions(auctionTab);
   applyAuctionFilter();
 
   // 층수 미설정 데이터 있으면 서버 측 마이그레이션 실행 (백그라운드)
@@ -1246,6 +1271,19 @@ function populateAuctionFilters() {
 
 /* 필터 적용 */
 function applyAuctionFilter() {
+  // 탭 배지 카운트
+  const activeCount = auctionData.filter(r => !isAuctionSold(r)).length;
+  const soldCount   = auctionData.filter(isAuctionSold).length;
+  const elActive = document.getElementById('at-tab-active-count');
+  const elSold   = document.getElementById('at-tab-sold-count');
+  if (elActive) elActive.textContent = activeCount;
+  if (elSold)   elSold.textContent   = soldCount;
+
+  // 탭 기반 1차 분류
+  const base = auctionData.filter(
+    auctionTab === 'sold' ? isAuctionSold : r => !isAuctionSold(r)
+  );
+
   const itemType    = document.getElementById('af-item-type')?.value || '';
   const region      = document.getElementById('af-region')?.value   || '';
   const status      = document.getElementById('af-status')?.value   || '';
@@ -1258,13 +1296,15 @@ function applyAuctionFilter() {
   const buildingFrom = parseFloat(document.getElementById('af-building-from')?.value)  || null;
   const buildingTo   = parseFloat(document.getElementById('af-building-to')?.value)    || null;
 
-  auctionFiltered = auctionData.filter(r => {
+  auctionFiltered = base.filter(r => {
     if (itemType && r.item_type !== itemType) return false;
     if (region   && r.region    !== region)   return false;
-    if (status   && r.status    !== status)   return false;
+    if (status) {
+      const s = r.status || '';
+      if (!(status === '유찰' ? s.startsWith('유찰') : s === status)) return false;
+    }
     if (floorFrom !== null && (r.floor == null || r.floor < floorFrom)) return false;
     if (floorTo   !== null && (r.floor == null || r.floor > floorTo))   return false;
-    // 입력값: 만원 단위, DB 저장값: 만원 단위 → 직접 비교
     if (minPriceFrom !== null && (r.min_price == null || r.min_price < minPriceFrom)) return false;
     if (minPriceTo   !== null && (r.min_price == null || r.min_price > minPriceTo))   return false;
     if (officialFrom !== null && (r.official_price == null || r.official_price < officialFrom)) return false;
@@ -1276,9 +1316,9 @@ function applyAuctionFilter() {
 
   const info = document.getElementById('af-result-count');
   if (info) {
-    const isFiltered = auctionFiltered.length !== auctionData.length;
+    const isFiltered = auctionFiltered.length !== base.length;
     info.textContent = isFiltered
-      ? `${auctionFiltered.length.toLocaleString()}건 표시 / 전체 ${auctionData.length.toLocaleString()}건`
+      ? `${auctionFiltered.length.toLocaleString()}건 표시 / 전체 ${base.length.toLocaleString()}건`
       : '';
     info.style.color = isFiltered ? 'var(--primary)' : '';
   }
@@ -1361,7 +1401,8 @@ function renderAuctionTable() {
   const selAll = document.getElementById('auction-sel-all');
 
   const saveMyBtn = document.getElementById('auction-save-my-btn');
-  badge.textContent    = auctionData.length + '건';
+  const tabBase = auctionData.filter(auctionTab === 'sold' ? isAuctionSold : r => !isAuctionSold(r));
+  badge.textContent = tabBase.length + '건';
   selBtn.style.display   = auctionSelected.size > 0 ? '' : 'none';
   if (saveMyBtn) saveMyBtn.style.display = auctionSelected.size > 0 ? '' : 'none';
 
@@ -1649,17 +1690,26 @@ async function deleteSelectedAuctions() {
 }
 
 async function deleteAllAuctions() {
-  if (!auctionData.length) return;
-  if (!confirm('전체 경매 데이터를 삭제하겠습니까?')) return;
+  const tabLabel = auctionTab === 'active' ? '진행중' : '낙찰·종결';
+  const tabItems = auctionData.filter(auctionTab === 'sold' ? isAuctionSold : r => !isAuctionSold(r));
+  if (!tabItems.length) return;
+  if (!confirm(`${tabLabel} 탭의 ${tabItems.length}건을 삭제하겠습니까?`)) return;
   try {
-    const res  = await fetch('/api/auction/all', { method: 'DELETE' });
+    const ids = tabItems.map(r => r.id);
+    const res = await fetch('/api/auction/batch', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
-    auctionData     = [];
-    auctionFiltered = [];
+    const idSet = new Set(ids);
+    auctionData     = auctionData.filter(r => !idSet.has(r.id));
+    auctionFiltered = auctionFiltered.filter(r => !idSet.has(r.id));
     auctionSelected.clear();
+    auctionData.forEach((r, i) => { r._seq = i + 1; });
     renderAuctionTable();
-    showToast('전체 삭제했습니다.');
+    showToast(`${tabLabel} 탭 ${ids.length}건 삭제했습니다.`);
   } catch (e) {
     showToast('삭제 실패: ' + e.message, 'error');
   }
