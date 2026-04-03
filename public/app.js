@@ -2902,6 +2902,19 @@ function openRefreshModal() {
   document.getElementById('refresh-modal').style.display = 'flex';
   document.getElementById('refresh-result').style.display = 'none';
   document.getElementById('refresh-start-btn').disabled = false;
+  // 선택 항목 정보 표시
+  const selCount = myAuctionSelected.size;
+  const total    = myAuctionData.length;
+  const info     = document.getElementById('refresh-target-info');
+  if (info) {
+    if (selCount > 0) {
+      info.textContent = `선택된 ${selCount}건 갱신`;
+      info.style.color = 'var(--primary)';
+    } else {
+      info.textContent = `전체 ${total}건 갱신 (선택 없음)`;
+      info.style.color = 'var(--text-muted)';
+    }
+  }
   // 현재 선택된 사이트의 저장된 쿠키 복원
   const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
   if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
@@ -2937,10 +2950,11 @@ async function startDataRefresh() {
   result.style.display = 'none';
 
   try {
-    const res  = await fetch('/api/my-auction/refresh', {
+    const ids = myAuctionSelected.size > 0 ? [...myAuctionSelected] : null;
+    const res = await fetch('/api/my-auction/refresh', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ site, cookie }),
+      body:    JSON.stringify({ site, cookie, ids }),
     });
     const data = await res.json();
 

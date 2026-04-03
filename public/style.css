@@ -651,7 +651,8 @@ body {
   max-width: 480px;
   box-shadow: 0 20px 60px rgba(0,0,0,.2);
 }
-.modal-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.modal-title { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+.refresh-target-info { font-size: 12px; margin: 0; }
 .modal-desc  { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.7; }
 .modal-desc a { color: var(--primary); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }

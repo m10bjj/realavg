@@ -1016,7 +1016,10 @@
   <div id="refresh-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeRefreshModal()">
     <div class="modal modal--refresh">
       <div class="modal-header-row">
-        <h3 class="modal-title">데이터 갱신하기</h3>
+        <div>
+          <h3 class="modal-title">데이터 갱신하기</h3>
+          <p id="refresh-target-info" class="refresh-target-info"></p>
+        </div>
         <button class="btn-modal-close" onclick="closeRefreshModal()">✕</button>
       </div>
 

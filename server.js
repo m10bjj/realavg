@@ -756,7 +756,7 @@ app.get('/api/my-auction', async (_req, res) => {
 
 /* POST /api/my-auction/refresh – 경매사이트 세션으로 데이터 갱신 */
 app.post('/api/my-auction/refresh', async (req, res) => {
-  const { site, cookie } = req.body;
+  const { site, cookie, ids } = req.body;
   if (!site || !cookie) return res.status(400).json({ error: '사이트와 쿠키가 필요합니다.' });
 
   /** 경매사건번호 → syear / sno 분리: "2024타경534078" → { syear:'2024', sno:'534078' } */
@@ -826,7 +826,9 @@ app.post('/api/my-auction/refresh', async (req, res) => {
   try { auctions = await db.getMyAuctions(); }
   catch (e) { return res.status(500).json({ error: 'DB 조회 실패: ' + e.message }); }
 
-  const targets = auctions.filter(a => a.case_no);
+  // ids가 주어지면 선택된 항목만, 없으면 전체
+  const idSet   = Array.isArray(ids) && ids.length > 0 ? new Set(ids.map(Number)) : null;
+  const targets = auctions.filter(a => a.case_no && (!idSet || idSet.has(a.id)));
   if (!targets.length) return res.json({ updated: 0, skipped: 0, failed: 0, details: [] });
 
   let updated = 0, skipped = 0, failed = 0;
