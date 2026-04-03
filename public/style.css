@@ -2028,6 +2028,22 @@ body {
 }
 .cookie-guide-step { font-size: 12px; color: var(--text-main); line-height: 1.6; }
 .cookie-guide-note { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.cookie-snippet-wrap {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--bg-sub); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px; margin: 6px 0;
+}
+.cookie-snippet {
+  flex: 1; font-size: 11px; color: var(--text-main);
+  word-break: break-all; white-space: pre-wrap; font-family: monospace;
+  user-select: all;
+}
+.cookie-snippet-copy {
+  flex-shrink: 0; padding: 3px 10px; font-size: 12px;
+  background: var(--primary); color: #fff;
+  border: none; border-radius: 4px; cursor: pointer;
+}
+.cookie-snippet-copy:hover { opacity: .85; }
 .refresh-cookie-input {
   width: 100%;
   padding: 8px 10px;

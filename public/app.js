@@ -2877,10 +2877,26 @@ function autoCalcTransferTax() {
    데이터 갱신 모달
 ═══════════════════════════════════════════════════════ */
 const AUCTION_SITES = {
-  bossauction: { name: '대장옥션', url: 'https://www.bossauction.co.kr/members/login.html' },
-  tankauction:  { name: '탱크옥션',  url: 'https://www.tankauction.com' },
+  bossauction: { name: '대장옥션', url: 'https://www.bossauction.co.kr/members/login.html', cookieType: 'PHPSESSID' },
+  tankauction:  { name: '탱크옥션',  url: 'https://www.tankauction.com', cookieType: 'PHPSESSID' },
 };
 const _savedCookies = {};  // 사이트별 쿠키 저장 (세션 유지)
+
+// 팝업창(대장옥션 등)에서 postMessage로 쿠키값 수신
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'bossauction_cookie' && e.data.v) {
+    const val = e.data.v;
+    document.getElementById('refresh-cookie-input').value = val;
+    _savedCookies['bossauction'] = val;
+    showToast('쿠키가 자동으로 입력되었습니다.', 'success');
+  }
+});
+
+function copyCookieSnippet() {
+  const code = document.getElementById('cookie-snippet').textContent
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  navigator.clipboard.writeText(code).then(() => showToast('코드가 복사되었습니다.', 'success'));
+}
 
 function openRefreshModal() {
   document.getElementById('refresh-modal').style.display = 'flex';
