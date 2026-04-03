@@ -890,12 +890,11 @@ function parseAuctionHtml(html, site) {
   if (site === 'bossauction') {
     // 매각기일: "2026-04-14<br/>(10:00)" 또는 "2026-04-14 (10:00)" 형태
     const dateM = html.match(/(\d{4}-\d{2}-\d{2})(?:<br\s*\/?>|\s)*\([\d:]+\)/);
-    // 최저가: "최저가&nbsp;131,600,000" 또는 "최저가 131,600,000" 형태
-    const minM  = html.match(/최저가[^\d]*([\d,]+)/);
-    // 감정가: "감정가&nbsp;188,000,000" 또는 "감정가 188,000,000" 형태
-    const gamM  = html.match(/감정가[^\d]*([\d,]+)/);
-    // 낙찰가: "낙찰가 145,000,000" 형태 (낙찰 시에만 존재)
-    const wonM  = html.match(/낙찰가[^\d]*([\d,]+)/);
+    // 실제 가격은 "최저가&nbsp;&nbsp;131,600,000" 형태
+    // 필터 SELECT의 value="5000000" 같은 값은 &nbsp; 없이 나와 구분됨
+    const minM = html.match(/최저가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
+    const gamM = html.match(/감정가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
+    const wonM = html.match(/낙찰가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
 
     // 상태 파싱: 낙찰가(숫자) 존재 → 매각, 유찰 이력보다 우선
     let status = null;
@@ -926,11 +925,11 @@ function parseAuctionHtml(html, site) {
     };
   }
 
-  // ── 탱크옥션 파싱 ──
+  // ── 탱크옥션 파싱 ── (콤마 포맷 숫자만 매칭)
   const dateM = html.match(/매각기일[\s\S]{0,60}?(\d{4}[.\-]\d{2}[.\-]\d{2})/);
-  const minM  = html.match(/최저[가매][각]?\s*가격?[：:\s]*([\d,]+)/);
-  const offM  = html.match(/공시[가격]{0,3}[：:\s]*([\d,]+)/);
-  const wonM  = html.match(/낙찰가[^\d]*([\d,]+)/);
+  const minM  = html.match(/최저[가매][각]?\s*가격?[^\d]*([\d]{1,3}(?:,[\d]{3})+)/);
+  const offM  = html.match(/공시[가격]{0,3}[^\d]*([\d]{1,3}(?:,[\d]{3})+)/);
+  const wonM  = html.match(/낙찰가[^\d]*([\d]{1,3}(?:,[\d]{3})+)/);
 
   let status = null;
   if (wonM) {
