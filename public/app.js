@@ -2997,24 +2997,27 @@ function copyCookieSnippet() {
   navigator.clipboard.writeText(code).then(() => showToast('코드가 복사되었습니다.', 'success'));
 }
 
-function openRefreshModal() {
+let _refreshContext = 'my-auction'; // 'my-auction' | 'auction'
+
+function openRefreshModal(context) {
+  _refreshContext = context || 'my-auction';
   document.getElementById('refresh-modal').style.display = 'flex';
   document.getElementById('refresh-result').style.display = 'none';
   document.getElementById('refresh-start-btn').disabled = false;
-  // 선택 항목 정보 표시
-  const selCount = myAuctionSelected.size;
-  const total    = myAuctionData.length;
-  const info     = document.getElementById('refresh-target-info');
+
+  const isAuction = _refreshContext === 'auction';
+  const selected  = isAuction ? auctionSelected : myAuctionSelected;
+  const total     = isAuction ? auctionData.length : myAuctionData.length;
+  const info      = document.getElementById('refresh-target-info');
   if (info) {
-    if (selCount > 0) {
-      info.textContent = `선택된 ${selCount}건 갱신`;
+    if (selected.size > 0) {
+      info.textContent = `선택된 ${selected.size}건 갱신`;
       info.style.color = 'var(--primary)';
     } else {
-      info.textContent = `전체 ${total}건 갱신 (선택 없음)`;
+      info.textContent = `전체 ${total}건 갱신${isAuction ? ' — 대량 시 시간이 걸릴 수 있습니다' : ' (선택 없음)'}`;
       info.style.color = 'var(--text-muted)';
     }
   }
-  // 현재 선택된 사이트의 저장된 쿠키 복원
   const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
   if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
 }
@@ -3049,8 +3052,12 @@ async function startDataRefresh() {
   result.style.display = 'none';
 
   try {
-    const ids = myAuctionSelected.size > 0 ? [...myAuctionSelected] : null;
-    const res = await fetch('/api/my-auction/refresh', {
+    const isAuction = _refreshContext === 'auction';
+    const selected  = isAuction ? auctionSelected : myAuctionSelected;
+    const ids       = selected.size > 0 ? [...selected] : null;
+    const apiUrl    = isAuction ? '/api/auction/refresh' : '/api/my-auction/refresh';
+
+    const res  = await fetch(apiUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ site, cookie, ids }),
@@ -3072,7 +3079,7 @@ async function startDataRefresh() {
         </div></details>` : ''}
     `;
     result.style.display = '';
-    loadMyAuctions(); // 테이블 새로고침
+    if (isAuction) loadAuctions(); else loadMyAuctions();
   } catch (e) {
     result.className = 'refresh-result refresh-result--error';
     result.innerHTML = `<strong>오류</strong><br>${e.message}`;
