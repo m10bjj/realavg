@@ -1938,17 +1938,24 @@ let myAuctionTab      = 'active'; // 'active' | 'sold'
 const SOLD_STATUSES = new Set(['낙찰', '변경/낙찰', '매각', '취하', '기각', '정지', '불허가']);
 const isMyAuctionSold = r => SOLD_STATUSES.has(r.my_status);
 
+function updateMyAuctionStatusOptions(tab) {
+  const sel = document.getElementById('maf-status');
+  if (!sel) return;
+  const prev = sel.value;
+  const opts = tab === 'active'
+    ? [['', '전체'], ['진행중', '진행중'], ['유찰', '유찰']]
+    : [['', '전체'], ['낙찰', '낙찰'], ['변경/낙찰', '변경/낙찰'], ['매각', '매각'], ['취하', '취하'], ['기각', '기각'], ['정지', '정지'], ['불허가', '불허가']];
+  sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  sel.value = opts.some(([v]) => v === prev) ? prev : '';
+}
+
 function setMyAuctionTab(tab) {
   myAuctionTab = tab;
   myAuctionSelected.clear();
   myAuctionPage = 1;
   document.getElementById('ma-tab-active').classList.toggle('is-active', tab === 'active');
   document.getElementById('ma-tab-sold').classList.toggle('is-active', tab === 'sold');
-  // 낙찰 탭으로 이동 시 상태 필터 초기화 (진행중/유찰 필터값이 낙찰 탭에서 혼동 방지)
-  if (tab === 'sold') {
-    const sel = document.getElementById('maf-status');
-    if (sel) sel.value = '';
-  }
+  updateMyAuctionStatusOptions(tab);
   applyMyAuctionFilter();
 }
 
@@ -1983,6 +1990,7 @@ async function loadMyAuctions() {
   }
   myAuctionData.forEach((r, i) => { r._seq = i + 1; });
   myAuctionSelected.clear();
+  updateMyAuctionStatusOptions(myAuctionTab);
   applyMyAuctionFilter();
 }
 
@@ -2007,7 +2015,11 @@ function applyMyAuctionFilter() {
   const bidTo   = document.getElementById('maf-bid-to')?.value   || '';
 
   myAuctionFiltered = base.filter(r => {
-    if (status && r.my_status !== status) return false;
+    if (status) {
+      const s = r.my_status || '';
+      const match = status === '유찰' ? s.startsWith('유찰') : s === status;
+      if (!match) return false;
+    }
     const d = r.my_bid_date || r.bid_date || '';
     if (bidFrom && (!d || d < bidFrom)) return false;
     if (bidTo   && (!d || d > bidTo))   return false;
