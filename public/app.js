@@ -1935,7 +1935,8 @@ let myAuctionPage     = 1;
 let myAuctionPageSize = 30;
 let myAuctionTab      = 'active'; // 'active' | 'sold'
 
-const isMyAuctionSold = r => r.my_status === '낙찰' || r.my_status === '변경/낙찰';
+const SOLD_STATUSES = new Set(['낙찰', '변경/낙찰', '매각', '취하', '기각', '정지', '불허가']);
+const isMyAuctionSold = r => SOLD_STATUSES.has(r.my_status);
 
 function setMyAuctionTab(tab) {
   myAuctionTab = tab;
@@ -2067,7 +2068,9 @@ function renderMyAuctionTable() {
   }
 
   tbody.innerHTML = pageRows.map(row => {
-    const sc = row.my_status === '낙찰' ? 'badge-won' : 'badge-active';
+    const sc = ['낙찰','변경/낙찰','매각'].includes(row.my_status) ? 'badge-won'
+             : ['취하','기각','정지','불허가'].includes(row.my_status) ? 'badge-neutral'
+             : 'badge-active';
     const savedDate = row.saved_at ? row.saved_at.slice(0, 10) : '-';
     return `<tr data-id="${row.id}" class="${myAuctionSelected.has(row.id) ? 'row-selected' : ''}">
       <td class="col-chk"><input type="checkbox" ${myAuctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleMyAuctionRow(${row.id}, this.checked)"></td>
