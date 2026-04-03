@@ -1047,7 +1047,11 @@
           <span class="refresh-step-num">2</span>
           <div class="refresh-step-body">
             <strong>쿠키 자동 가져오기</strong>
-            <p>로그인 후 팝업창에서 <code>F12</code> → <strong>Console</strong> 탭에 아래 코드를 붙여넣고 Enter를 누르세요.</p>
+            <p>로그인 후 팝업창에서 <code>F12</code> → <strong>Console</strong> 탭을 여세요.</p>
+            <div class="refresh-cookie-guide">
+              <div class="cookie-guide-step">① Console 탭에 <code>allow pasting</code> 입력 후 Enter <span style="color:var(--text-muted)">(최초 1회)</span></div>
+              <div class="cookie-guide-step">② 아래 코드를 복사하여 붙여넣고 Enter</div>
+            </div>
             <div class="cookie-snippet-wrap">
               <code id="cookie-snippet" class="cookie-snippet">var m=document.cookie.match(/PHPSESSID=([^;]+)/);if(m&amp;&amp;window.opener){window.opener.postMessage({type:'bossauction_cookie',v:m[1]},'*');console.log('전송완료:'+m[1]);}else{alert(m?'opener없음':'로그인필요');}</code>
               <button class="cookie-snippet-copy" onclick="copyCookieSnippet()">복사</button>
