@@ -1933,6 +1933,23 @@ let myAuctionFiltered = [];
 let myAuctionSelected = new Set();
 let myAuctionPage     = 1;
 let myAuctionPageSize = 30;
+let myAuctionTab      = 'active'; // 'active' | 'sold'
+
+const isMyAuctionSold = r => r.my_status === '낙찰' || r.my_status === '변경/낙찰';
+
+function setMyAuctionTab(tab) {
+  myAuctionTab = tab;
+  myAuctionSelected.clear();
+  myAuctionPage = 1;
+  document.getElementById('ma-tab-active').classList.toggle('is-active', tab === 'active');
+  document.getElementById('ma-tab-sold').classList.toggle('is-active', tab === 'sold');
+  // 낙찰 탭으로 이동 시 상태 필터 초기화 (진행중/유찰 필터값이 낙찰 탭에서 혼동 방지)
+  if (tab === 'sold') {
+    const sel = document.getElementById('maf-status');
+    if (sel) sel.value = '';
+  }
+  applyMyAuctionFilter();
+}
 
 /* 경매 뷰에서 선택한 항목 저장 */
 async function saveToMyAuction() {
@@ -1970,11 +1987,25 @@ async function loadMyAuctions() {
 
 /* 필터 */
 function applyMyAuctionFilter() {
+  // 탭 배지 카운트 업데이트 (사이드바 필터 무관하게 전체 기준)
+  const activeCount = myAuctionData.filter(r => !isMyAuctionSold(r)).length;
+  const soldCount   = myAuctionData.filter(isMyAuctionSold).length;
+  const elActive = document.getElementById('ma-tab-active-count');
+  const elSold   = document.getElementById('ma-tab-sold-count');
+  if (elActive) elActive.textContent = activeCount;
+  if (elSold)   elSold.textContent   = soldCount;
+
+  // 탭 기반 1차 분류
+  const base = myAuctionData.filter(
+    myAuctionTab === 'sold' ? isMyAuctionSold : r => !isMyAuctionSold(r)
+  );
+
+  // 사이드바 필터 적용
   const status  = document.getElementById('maf-status')?.value   || '';
   const bidFrom = document.getElementById('maf-bid-from')?.value || '';
   const bidTo   = document.getElementById('maf-bid-to')?.value   || '';
 
-  myAuctionFiltered = myAuctionData.filter(r => {
+  myAuctionFiltered = base.filter(r => {
     if (status && r.my_status !== status) return false;
     const d = r.my_bid_date || r.bid_date || '';
     if (bidFrom && (!d || d < bidFrom)) return false;
@@ -1984,9 +2015,9 @@ function applyMyAuctionFilter() {
 
   const info = document.getElementById('maf-result-count');
   if (info) {
-    const isFiltered = myAuctionFiltered.length !== myAuctionData.length;
+    const isFiltered = myAuctionFiltered.length !== base.length;
     info.textContent = isFiltered
-      ? `${myAuctionFiltered.length.toLocaleString()}건 표시 / 전체 ${myAuctionData.length.toLocaleString()}건` : '';
+      ? `${myAuctionFiltered.length.toLocaleString()}건 표시 / 전체 ${base.length.toLocaleString()}건` : '';
   }
 
   myAuctionPage = 1;
@@ -2016,7 +2047,7 @@ function renderMyAuctionTable() {
   const end        = Math.min(start + myAuctionPageSize, total);
   const pageRows   = myAuctionFiltered.slice(start, end);
 
-  if (badge)  badge.textContent    = myAuctionData.length + '건';
+  if (badge)  badge.textContent    = myAuctionData.filter(myAuctionTab === 'sold' ? isMyAuctionSold : r => !isMyAuctionSold(r)).length + '건';
   if (selBtn) selBtn.style.display = myAuctionSelected.size > 0 ? '' : 'none';
 
   const pageInfo = document.getElementById('my-auction-page-info');

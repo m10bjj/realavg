@@ -1622,6 +1622,42 @@ body {
 .btn-row-del:hover { color: var(--danger); background: #fee2e2; }
 
 
+/* 나만의경매 탭 */
+.my-auction-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px 0;
+  flex-shrink: 0;
+}
+.my-auction-tab {
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+.my-auction-tab.is-active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.ma-tab-badge {
+  display: inline-block;
+  background: rgba(0,0,0,0.10);
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 3px;
+}
+.my-auction-tab.is-active .ma-tab-badge {
+  background: rgba(255,255,255,0.25);
+}
+
 /* 경매 페이지바 */
 .auction-page-bar {
   display: flex;

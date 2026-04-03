@@ -678,6 +678,15 @@
           </div>
         </div>
 
+        <div class="my-auction-tabs">
+          <button id="ma-tab-active" class="my-auction-tab is-active" onclick="setMyAuctionTab('active')">
+            진행중 · 유찰 <span id="ma-tab-active-count" class="ma-tab-badge">0</span>
+          </button>
+          <button id="ma-tab-sold" class="my-auction-tab" onclick="setMyAuctionTab('sold')">
+            낙찰 (매각) <span id="ma-tab-sold-count" class="ma-tab-badge">0</span>
+          </button>
+        </div>
+
         <div class="auction-page-bar">
           <div class="auction-page-info" id="my-auction-page-info"></div>
           <select id="my-auction-page-size" onchange="changeMyAuctionPageSize()">
