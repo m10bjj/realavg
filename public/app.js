@@ -3197,6 +3197,24 @@ function closeAuctionGuideModal(e) {
   document.getElementById('auction-guide-backdrop').style.display = 'none';
 }
 
+function openRealEstateGuideModal() {
+  document.getElementById('realestate-guide-backdrop').style.display = 'flex';
+}
+
+function closeRealEstateGuideModal(e) {
+  if (e && e.target !== document.getElementById('realestate-guide-backdrop')) return;
+  document.getElementById('realestate-guide-backdrop').style.display = 'none';
+}
+
+function openNaverGuideModal() {
+  document.getElementById('naver-guide-backdrop').style.display = 'flex';
+}
+
+function closeNaverGuideModal(e) {
+  if (e && e.target !== document.getElementById('naver-guide-backdrop')) return;
+  document.getElementById('naver-guide-backdrop').style.display = 'none';
+}
+
 function openAuctionLoginWindow() {
   const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
   if (!site) return;
