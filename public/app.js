@@ -3112,22 +3112,23 @@ let _refreshContext = 'my-auction'; // 'my-auction' | 'auction'
 
 function openRefreshModal(context) {
   _refreshContext = context || 'my-auction';
+
+  const isAuction = _refreshContext === 'auction';
+  const selected  = isAuction ? auctionSelected : myAuctionSelected;
+
+  if (selected.size === 0) {
+    showToast('갱신할 항목을 먼저 선택해주세요.', 'error');
+    return;
+  }
+
   document.getElementById('refresh-modal').style.display = 'flex';
   document.getElementById('refresh-result').style.display = 'none';
   document.getElementById('refresh-start-btn').disabled = false;
 
-  const isAuction = _refreshContext === 'auction';
-  const selected  = isAuction ? auctionSelected : myAuctionSelected;
-  const total     = isAuction ? auctionData.length : myAuctionData.length;
-  const info      = document.getElementById('refresh-target-info');
+  const info = document.getElementById('refresh-target-info');
   if (info) {
-    if (selected.size > 0) {
-      info.textContent = `선택된 ${selected.size}건 갱신`;
-      info.style.color = 'var(--primary)';
-    } else {
-      info.textContent = `전체 ${total}건 갱신${isAuction ? ' — 대량 시 시간이 걸릴 수 있습니다' : ' (선택 없음)'}`;
-      info.style.color = 'var(--text-muted)';
-    }
+    info.textContent = `선택된 ${selected.size}건 갱신`;
+    info.style.color = 'var(--primary)';
   }
   const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
   if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
