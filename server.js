@@ -754,176 +754,65 @@ app.get('/api/my-auction', async (_req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-/* POST /api/my-auction/refresh – 경매사이트 세션으로 데이터 갱신 */
-app.post('/api/my-auction/refresh', async (req, res) => {
+/* ── 갱신 공통 상수 ── */
+function _parseCaseNo(caseNo) {
+  const m = (caseNo || '').match(/(\d{4})[^\d]*(\d+)/);
+  return m ? { syear: m[1], sno: m[2] } : null;
+}
+const _YONGDO_MAP = {
+  '아파트':'01','다세대':'02','다세대(빌라)':'02','빌라':'02',
+  '주택':'03','단독주택':'03','근린주택':'05',
+  '다가구':'06','다가구(원룸등)':'06','원룸':'06','도시형생활주택':'07',
+  '근린상가':'11','공장':'12','오피스텔':'13','근린시설':'14',
+  '숙박시설':'15','창고':'16','아파트형공장':'17','주유소':'18',
+  '목욕탕':'19','의료시설':'20','노유자시설':'21','사무실':'22',
+  '자동차관련시설':'23','장례관련시설':'24','문화및집회시설':'25',
+  '농지':'31','임야':'33','대지':'34','도로':'35','잡종지':'36',
+  '과수원':'37','목장용지':'38','공장용지':'39','유지':'40',
+  '구거':'41','하천':'42','제방':'43','기타용지':'44',
+  '창고용지':'45','학교용지':'46','체육용지':'47','종교용지':'48',
+  '숙박(콘도등)':'52','묘지':'53','주차장':'55','교육시설':'56',
+  '어업권':'57','광업권':'58','염전':'59','양어장':'60',
+  '승용자동차':'71','SUV':'72','승합자동차':'73','화물자동차':'74',
+  '중장비':'75','덤프트럭':'76','선박':'78','항공기':'79',
+};
+const _REFRESH_SITE_CFG = {
+  bossauction: {
+    host: 'https://www.bossauction.co.kr',
+    searchUrl: (caseNo, itemType) => {
+      const p = _parseCaseNo(caseNo); if (!p) return null;
+      const yd = _YONGDO_MAP[(itemType||'').trim()] || '';
+      return `https://www.bossauction.co.kr/auction/list_pub.html?page=1&listnum=0&syear=${p.syear}&sno=${p.sno}${yd?`&yongdo=${yd}`:''}`;
+    },
+  },
+  tankauction: {
+    host: 'https://www.tankauction.com',
+    searchUrl: (caseNo) => {
+      const p = _parseCaseNo(caseNo); if (!p) return null;
+      return `https://www.tankauction.com/ca/caList.php?searchTxt=${encodeURIComponent(caseNo)}`;
+    },
+  },
+};
+
+/* ── 공통 갱신 헬퍼: SSE + 병렬 5개 동시 + timeout 10s ── */
+async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField, statusField }) {
   const { site, cookie, ids } = req.body;
   if (!site || !cookie) return res.status(400).json({ error: '사이트와 쿠키가 필요합니다.' });
-
-  /** 경매사건번호 → syear / sno 분리: "2024타경534078" → { syear:'2024', sno:'534078' } */
-  function parseCaseNo(caseNo) {
-    const m = (caseNo || '').match(/(\d{4})[^\d]*(\d+)/);
-    if (!m) return null;
-    return { syear: m[1], sno: m[2] };
-  }
-
-  /** item_type → 대장옥션 yongdo 코드 매핑 */
-  const YONGDO_MAP = {
-    '아파트': '01', '다세대': '02', '다세대(빌라)': '02', '빌라': '02',
-    '주택': '03', '단독주택': '03', '근린주택': '05',
-    '다가구': '06', '다가구(원룸등)': '06', '원룸': '06',
-    '도시형생활주택': '07',
-    '근린상가': '11', '공장': '12', '오피스텔': '13', '근린시설': '14',
-    '숙박시설': '15', '창고': '16', '아파트형공장': '17', '주유소': '18',
-    '목욕탕': '19', '의료시설': '20', '노유자시설': '21', '사무실': '22',
-    '자동차관련시설': '23', '장례관련시설': '24', '문화및집회시설': '25',
-    '농지': '31', '임야': '33', '대지': '34', '도로': '35', '잡종지': '36',
-    '과수원': '37', '목장용지': '38', '공장용지': '39', '유지': '40',
-    '구거': '41', '하천': '42', '제방': '43', '기타용지': '44',
-    '창고용지': '45', '학교용지': '46', '체육용지': '47', '종교용지': '48',
-    '숙박(콘도등)': '52', '묘지': '53', '주차장': '55', '교육시설': '56',
-    '어업권': '57', '광업권': '58', '염전': '59', '양어장': '60',
-    '승용자동차': '71', 'SUV': '72', '승합자동차': '73', '화물자동차': '74',
-    '중장비': '75', '덤프트럭': '76', '선박': '78', '항공기': '79',
-  };
-  const toYongdo = (itemType) => YONGDO_MAP[(itemType || '').trim()] || '';
-
-  const SITE_CFG = {
-    bossauction: {
-      host:      'https://www.bossauction.co.kr',
-      searchUrl: (caseNo, itemType) => {
-        const p = parseCaseNo(caseNo);
-        if (!p) return null;
-        const yongdo = toYongdo(itemType);
-        const ydParam = yongdo ? `&yongdo=${yongdo}` : '';
-        return `https://www.bossauction.co.kr/auction/list_pub.html?page=1&listnum=0&syear=${p.syear}&sno=${p.sno}${ydParam}`;
-      },
-    },
-    tankauction: {
-      host:      'https://www.tankauction.com',
-      searchUrl: (caseNo) => {
-        const p = parseCaseNo(caseNo);
-        if (!p) return null;
-        return `https://www.tankauction.com/ca/caList.php?searchTxt=${encodeURIComponent(caseNo)}`;
-      },
-    },
-  };
-
-  const cfg = SITE_CFG[site];
+  const cfg = _REFRESH_SITE_CFG[site];
   if (!cfg) return res.status(400).json({ error: '지원하지 않는 사이트입니다.' });
 
-  // 쿠키값 전처리: "PHPSESSID=abc123" 형태로 들어오면 그대로 사용, 값만 오면 감싸기
-  const cookieHeader = cookie.includes('=') ? cookie : `PHPSESSID=${cookie}`;
+  // SSE 헤더 설정
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
 
-  const headers = {
-    'Cookie':          cookieHeader,
-    'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0',
-    'Referer':         cfg.host,
-    'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'ko-KR,ko;q=0.9',
-  };
-
-  let auctions;
-  try { auctions = await db.getMyAuctions(); }
-  catch (e) { return res.status(500).json({ error: 'DB 조회 실패: ' + e.message }); }
-
-  // ids가 주어지면 선택된 항목만, 없으면 전체
-  const idSet   = Array.isArray(ids) && ids.length > 0 ? new Set(ids.map(Number)) : null;
-  const targets = auctions.filter(a => a.case_no && (!idSet || idSet.has(a.id)));
-  if (!targets.length) return res.json({ updated: 0, skipped: 0, failed: 0, details: [] });
-
-  let updated = 0, skipped = 0, failed = 0;
-  const details = [];
-
-  for (const auction of targets) {
-    try {
-      const url = cfg.searchUrl(auction.case_no, auction.item_type);
-      if (!url) {
-        details.push({ case_no: auction.case_no, msg: '사건번호 형식 오류' });
-        failed++; continue;
-      }
-
-      const resp = await axios.get(url, { headers, timeout: 20000, maxRedirects: 5 });
-      const html = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
-
-      // 로그인 세션 만료 감지
-      if (html.includes('로그인을 해주세요') || html.includes('login.html') && !html.includes('매각기일')) {
-        return res.status(401).json({ error: '세션이 만료되었습니다. 쿠키를 다시 입력해주세요.' });
-      }
-
-      const parsed = parseAuctionHtml(html, site);
-
-      // 변경 여부 비교 (null인 항목은 덮어쓰지 않음)
-      const changes = {};
-      if (parsed.bid_date       && parsed.bid_date       !== auction.my_bid_date)     changes.my_bid_date     = parsed.bid_date;
-      if (parsed.min_price      && parsed.min_price      !== auction.min_price)        changes.min_price       = parsed.min_price;
-      if (parsed.official_price && parsed.official_price !== auction.official_price)   changes.official_price  = parsed.official_price;
-      if (parsed.status         && parsed.status         !== auction.my_status)        changes.my_status       = parsed.status;
-      if (parsed.winning_price  && parsed.winning_price  !== auction.winning_price)    changes.winning_price   = parsed.winning_price;
-
-      if (Object.keys(changes).length === 0) {
-        const hasData = parsed.bid_date || parsed.min_price || parsed.official_price || parsed.status;
-        const found = hasData
-          ? `변동 없음 (상태:${parsed.status||'-'} 입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'} 낙찰가:${parsed.winning_price||'-'})`
-          : `데이터 미확인 - 파싱결과: 상태=${parsed.status} 입찰일=${parsed.bid_date} 최저가=${parsed.min_price} 낙찰가=${parsed.winning_price}`;
-        details.push({ case_no: auction.case_no, msg: found });
-        if (!hasData) failed++; else skipped++;
-      } else {
-        await db.updateMyAuction(auction.id, changes);
-        const desc = Object.entries(changes).map(([k,v]) => `${k}=${v}`).join(', ');
-        details.push({ case_no: auction.case_no, msg: `업데이트: ${desc}` });
-        updated++;
-      }
-    } catch (e) {
-      details.push({ case_no: auction.case_no, msg: `오류: ${e.message}` });
-      failed++;
+  const send = (data) => {
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (typeof res.flush === 'function') res.flush();
     }
-  }
-
-  res.json({ updated, skipped, failed, details });
-});
-
-/* POST /api/auction/refresh – 부동산경매(안전한물건) 데이터 갱신 */
-app.post('/api/auction/refresh', requireAuth, async (req, res) => {
-  const { site, cookie, ids } = req.body;
-  if (!site || !cookie) return res.status(400).json({ error: '사이트와 쿠키가 필요합니다.' });
-
-  function parseCaseNo(caseNo) {
-    const m = (caseNo || '').match(/(\d{4})[^\d]*(\d+)/);
-    if (!m) return null;
-    return { syear: m[1], sno: m[2] };
-  }
-
-  const YONGDO_MAP = {
-    '아파트': '01', '다세대': '02', '다세대(빌라)': '02', '빌라': '02',
-    '주택': '03', '단독주택': '03', '근린주택': '05', '다가구': '06',
-    '다가구(원룸등)': '06', '원룸': '06', '도시형생활주택': '07',
-    '근린상가': '11', '공장': '12', '오피스텔': '13', '근린시설': '14',
-    '숙박시설': '15', '창고': '16', '아파트형공장': '17', '주유소': '18',
-    '목욕탕': '19', '의료시설': '20', '노유자시설': '21', '사무실': '22',
-    '농지': '31', '임야': '33', '대지': '34',
   };
-  const toYongdo = (t) => YONGDO_MAP[(t || '').trim()] || '';
-
-  const SITE_CFG = {
-    bossauction: {
-      host: 'https://www.bossauction.co.kr',
-      searchUrl: (caseNo, itemType) => {
-        const p = parseCaseNo(caseNo); if (!p) return null;
-        const yd = toYongdo(itemType);
-        return `https://www.bossauction.co.kr/auction/list_pub.html?page=1&listnum=0&syear=${p.syear}&sno=${p.sno}${yd ? `&yongdo=${yd}` : ''}`;
-      },
-    },
-    tankauction: {
-      host: 'https://www.tankauction.com',
-      searchUrl: (caseNo) => {
-        const p = parseCaseNo(caseNo); if (!p) return null;
-        return `https://www.tankauction.com/ca/caList.php?searchTxt=${encodeURIComponent(caseNo)}`;
-      },
-    },
-  };
-
-  const cfg = SITE_CFG[site];
-  if (!cfg) return res.status(400).json({ error: '지원하지 않는 사이트입니다.' });
 
   const cookieHeader = cookie.includes('=') ? cookie : `PHPSESSID=${cookie}`;
   const headers = {
@@ -934,57 +823,99 @@ app.post('/api/auction/refresh', requireAuth, async (req, res) => {
     'Accept-Language': 'ko-KR,ko;q=0.9',
   };
 
-  let auctions;
-  try { auctions = await db.getAuctions(); }
-  catch (e) { return res.status(500).json({ error: 'DB 조회 실패: ' + e.message }); }
+  let items;
+  try { items = await getItems(); }
+  catch (e) { send({ type: 'error', error: 'DB 조회 실패: ' + e.message }); res.end(); return; }
 
   const idSet   = Array.isArray(ids) && ids.length > 0 ? new Set(ids.map(Number)) : null;
-  const targets = auctions.filter(a => a.case_no && (!idSet || idSet.has(a.id)));
-  if (!targets.length) return res.json({ updated: 0, skipped: 0, failed: 0, details: [] });
+  const targets = items.filter(a => a.case_no && (!idSet || idSet.has(a.id)));
+  const total   = targets.length;
 
-  let updated = 0, skipped = 0, failed = 0;
+  if (!total) { send({ type: 'complete', updated: 0, skipped: 0, failed: 0, details: [] }); res.end(); return; }
+
+  send({ type: 'start', total });
+
+  let updated = 0, skipped = 0, failed = 0, done = 0;
   const details = [];
+  let sessionExpired = false;
 
-  for (const auction of targets) {
+  async function processOne(auction) {
+    if (sessionExpired) return;
     try {
       const url = cfg.searchUrl(auction.case_no, auction.item_type);
-      if (!url) { details.push({ case_no: auction.case_no, msg: '사건번호 형식 오류' }); failed++; continue; }
-
-      const resp = await axios.get(url, { headers, timeout: 20000, maxRedirects: 5 });
-      const html = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
-
-      if (html.includes('로그인을 해주세요') || html.includes('login.html') && !html.includes('매각기일')) {
-        return res.status(401).json({ error: '세션이 만료되었습니다. 쿠키를 다시 입력해주세요.' });
-      }
-
-      const parsed = parseAuctionHtml(html, site);
-      const changes = {};
-      if (parsed.bid_date       && parsed.bid_date       !== auction.bid_date)       changes.bid_date       = parsed.bid_date;
-      if (parsed.min_price      && parsed.min_price      !== auction.min_price)       changes.min_price      = parsed.min_price;
-      if (parsed.official_price && parsed.official_price !== auction.official_price)  changes.official_price = parsed.official_price;
-      if (parsed.status         && parsed.status         !== auction.status)          changes.status         = parsed.status;
-      if (parsed.winning_price  && parsed.winning_price  !== auction.winning_price)   changes.winning_price  = parsed.winning_price;
-
-      if (Object.keys(changes).length === 0) {
-        const hasData = parsed.bid_date || parsed.min_price || parsed.official_price || parsed.status;
-        const msg = hasData
-          ? `변동 없음 (상태:${parsed.status||'-'} 입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'} 낙찰가:${parsed.winning_price||'-'})`
-          : `데이터 미확인 - 파싱결과: 상태=${parsed.status} 입찰일=${parsed.bid_date} 최저가=${parsed.min_price} 낙찰가=${parsed.winning_price}`;
-        details.push({ case_no: auction.case_no, msg });
-        if (!hasData) failed++; else skipped++;
+      if (!url) {
+        details.push({ case_no: auction.case_no, msg: '사건번호 형식 오류' });
+        failed++;
       } else {
-        await db.updateAuction(auction.id, changes);
-        details.push({ case_no: auction.case_no, msg: `업데이트: ${Object.entries(changes).map(([k,v]) => `${k}=${v}`).join(', ')}` });
-        updated++;
+        const resp = await axios.get(url, { headers, timeout: 10000, maxRedirects: 5 });
+        const html = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
+
+        if (html.includes('로그인을 해주세요') || (html.includes('login.html') && !html.includes('매각기일'))) {
+          sessionExpired = true;
+          send({ type: 'error', error: '세션이 만료되었습니다. 쿠키를 다시 입력해주세요.' });
+          return;
+        }
+
+        const parsed = parseAuctionHtml(html, site);
+        const changes = {};
+        if (parsed.bid_date       && parsed.bid_date       !== auction[bidDateField]) changes[bidDateField] = parsed.bid_date;
+        if (parsed.min_price      && parsed.min_price      !== auction.min_price)      changes.min_price      = parsed.min_price;
+        if (parsed.official_price && parsed.official_price !== auction.official_price) changes.official_price = parsed.official_price;
+        if (parsed.status         && parsed.status         !== auction[statusField])   changes[statusField]   = parsed.status;
+        if (parsed.winning_price  && parsed.winning_price  !== auction.winning_price)  changes.winning_price  = parsed.winning_price;
+
+        if (Object.keys(changes).length === 0) {
+          const hasData = parsed.bid_date || parsed.min_price || parsed.official_price || parsed.status;
+          details.push({ case_no: auction.case_no, msg: hasData
+            ? `변동 없음 (상태:${parsed.status||'-'} 입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'} 낙찰가:${parsed.winning_price||'-'})`
+            : `데이터 미확인 - 파싱결과: 상태=${parsed.status} 입찰일=${parsed.bid_date} 최저가=${parsed.min_price} 낙찰가=${parsed.winning_price}` });
+          if (!hasData) failed++; else skipped++;
+        } else {
+          await updateItem(auction.id, changes);
+          details.push({ case_no: auction.case_no, msg: `업데이트: ${Object.entries(changes).map(([k,v])=>`${k}=${v}`).join(', ')}` });
+          updated++;
+        }
       }
     } catch (e) {
       details.push({ case_no: auction.case_no, msg: `오류: ${e.message}` });
       failed++;
     }
+    done++;
+    send({ type: 'progress', done, total, updated, skipped, failed });
   }
 
-  res.json({ updated, skipped, failed, details });
-});
+  // 5개 동시 처리 (워커 풀)
+  let idx = 0;
+  async function worker() {
+    while (idx < targets.length && !sessionExpired) {
+      await processOne(targets[idx++]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(5, targets.length) }, worker));
+
+  if (!sessionExpired) send({ type: 'complete', updated, skipped, failed, details });
+  res.end();
+}
+
+/* POST /api/my-auction/refresh */
+app.post('/api/my-auction/refresh', (req, res) =>
+  runAuctionRefresh(req, res, {
+    getItems:     () => db.getMyAuctions(),
+    updateItem:   (id, f) => db.updateMyAuction(id, f),
+    bidDateField: 'my_bid_date',
+    statusField:  'my_status',
+  })
+);
+
+/* POST /api/auction/refresh */
+app.post('/api/auction/refresh', requireAuth, (req, res) =>
+  runAuctionRefresh(req, res, {
+    getItems:     () => db.getAuctions(),
+    updateItem:   (id, f) => db.updateAuction(id, f),
+    bidDateField: 'bid_date',
+    statusField:  'status',
+  })
+);
 
 /** HTML에서 입찰일·최저가·공시가 파싱 */
 function parseAuctionHtml(html, site) {

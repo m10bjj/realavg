@@ -1210,6 +1210,32 @@ function updateAuctionStatusOptions(tab) {
   sel.value = opts.some(([v]) => v === prev) ? prev : '';
 }
 
+/* 탭에 따라 필터 섹션 show/hide + 숨겨진 값 초기화 */
+function updateAuctionFiltersForTab(tab) {
+  const isActive = tab === 'active';
+
+  // 진행중 전용
+  const bidDateSec   = document.getElementById('af-bid-date-section');
+  const activePriceSec = document.getElementById('af-active-price-section');
+  // 낙찰·종결 전용
+  const winPriceSec  = document.getElementById('af-winning-price-section');
+  const winRateSec   = document.getElementById('af-winning-rate-section');
+
+  if (bidDateSec)    bidDateSec.style.display    = isActive ? '' : 'none';
+  if (activePriceSec) activePriceSec.style.display = isActive ? '' : 'none';
+  if (winPriceSec)   winPriceSec.style.display   = isActive ? 'none' : '';
+  if (winRateSec)    winRateSec.style.display    = isActive ? 'none' : '';
+
+  // 숨겨진 필드 초기화 (잔류값이 다른 탭에 영향 안 주도록)
+  if (isActive) {
+    ['af-winning-price-from','af-winning-price-to','af-winning-rate-from','af-winning-rate-to']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  } else {
+    ['af-bid-date-from','af-bid-date-to','af-min-price-from','af-min-price-to','af-official-from','af-official-to']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  }
+}
+
 function setAuctionTab(tab) {
   auctionTab = tab;
   auctionSelected.clear();
@@ -1217,6 +1243,7 @@ function setAuctionTab(tab) {
   document.getElementById('at-tab-active').classList.toggle('is-active', tab === 'active');
   document.getElementById('at-tab-sold').classList.toggle('is-active', tab === 'sold');
   updateAuctionStatusOptions(tab);
+  updateAuctionFiltersForTab(tab);
   applyAuctionFilter();
 }
 
@@ -1233,6 +1260,7 @@ async function loadAuctions() {
   auctionSelected.clear();
   populateAuctionFilters();
   updateAuctionStatusOptions(auctionTab);
+  updateAuctionFiltersForTab(auctionTab);
   applyAuctionFilter();
 
   // 층수 미설정 데이터 있으면 서버 측 마이그레이션 실행 (백그라운드)
@@ -1244,7 +1272,7 @@ async function loadAuctions() {
   }
 
   // Enter 키로 조회
-  document.querySelectorAll('#sidebar-auction-filter-body input[type="number"]').forEach(el => {
+  document.querySelectorAll('#sidebar-auction-filter-body input').forEach(el => {
     el.addEventListener('keydown', e => { if (e.key === 'Enter') applyAuctionFilter(); });
   });
 }
@@ -1289,12 +1317,25 @@ function applyAuctionFilter() {
   const status      = document.getElementById('af-status')?.value   || '';
   const floorFrom   = document.getElementById('af-floor-from')?.value !== '' ? parseInt(document.getElementById('af-floor-from')?.value, 10) : null;
   const floorTo     = document.getElementById('af-floor-to')?.value   !== '' ? parseInt(document.getElementById('af-floor-to')?.value,   10) : null;
-  const minPriceFrom = parseFloat(document.getElementById('af-min-price-from')?.value) || null;
-  const minPriceTo   = parseFloat(document.getElementById('af-min-price-to')?.value)   || null;
-  const officialFrom = parseFloat(document.getElementById('af-official-from')?.value)  || null;
-  const officialTo   = parseFloat(document.getElementById('af-official-to')?.value)    || null;
   const buildingFrom = parseFloat(document.getElementById('af-building-from')?.value)  || null;
   const buildingTo   = parseFloat(document.getElementById('af-building-to')?.value)    || null;
+
+  // 진행중 탭 전용 필터
+  const bidDateFrom     = document.getElementById('af-bid-date-from')?.value  || null;
+  const bidDateTo       = document.getElementById('af-bid-date-to')?.value    || null;
+  const minPriceFrom    = parseFloat(document.getElementById('af-min-price-from')?.value)    || null;
+  const minPriceTo      = parseFloat(document.getElementById('af-min-price-to')?.value)      || null;
+  const officialFrom    = parseFloat(document.getElementById('af-official-from')?.value)     || null;
+  const officialTo      = parseFloat(document.getElementById('af-official-to')?.value)       || null;
+
+  // 낙찰·종결 탭 전용 필터
+  const winPriceFrom    = parseFloat(document.getElementById('af-winning-price-from')?.value) || null;
+  const winPriceTo      = parseFloat(document.getElementById('af-winning-price-to')?.value)   || null;
+  const winRateFrom     = parseFloat(document.getElementById('af-winning-rate-from')?.value)  || null;
+  const winRateTo       = parseFloat(document.getElementById('af-winning-rate-to')?.value)    || null;
+
+  // bid_date 정규화 헬퍼 (YYYY.MM.DD → YYYY-MM-DD)
+  const normDate = s => s ? s.replace(/\./g, '-') : null;
 
   auctionFiltered = base.filter(r => {
     if (itemType && r.item_type !== itemType) return false;
@@ -1303,14 +1344,34 @@ function applyAuctionFilter() {
       const s = r.status || '';
       if (!(status === '유찰' ? s.startsWith('유찰') : s === status)) return false;
     }
-    if (floorFrom !== null && (r.floor == null || r.floor < floorFrom)) return false;
-    if (floorTo   !== null && (r.floor == null || r.floor > floorTo))   return false;
+    if (floorFrom    !== null && (r.floor == null || r.floor < floorFrom)) return false;
+    if (floorTo      !== null && (r.floor == null || r.floor > floorTo))   return false;
+    if (buildingFrom !== null && (r.building_area == null || r.building_area < buildingFrom)) return false;
+    if (buildingTo   !== null && (r.building_area == null || r.building_area > buildingTo))   return false;
+
+    // 진행중 탭 전용
+    if (bidDateFrom || bidDateTo) {
+      const d = normDate(r.bid_date);
+      if (!d) return false;
+      if (bidDateFrom && d < bidDateFrom) return false;
+      if (bidDateTo   && d > bidDateTo)   return false;
+    }
     if (minPriceFrom !== null && (r.min_price == null || r.min_price < minPriceFrom)) return false;
     if (minPriceTo   !== null && (r.min_price == null || r.min_price > minPriceTo))   return false;
     if (officialFrom !== null && (r.official_price == null || r.official_price < officialFrom)) return false;
     if (officialTo   !== null && (r.official_price == null || r.official_price > officialTo))   return false;
-    if (buildingFrom !== null && (r.building_area == null || r.building_area < buildingFrom)) return false;
-    if (buildingTo   !== null && (r.building_area == null || r.building_area > buildingTo))   return false;
+
+    // 낙찰·종결 탭 전용
+    if (winPriceFrom !== null && (r.winning_price == null || r.winning_price < winPriceFrom)) return false;
+    if (winPriceTo   !== null && (r.winning_price == null || r.winning_price > winPriceTo))   return false;
+    if (winRateFrom !== null || winRateTo !== null) {
+      const rate = (r.winning_price && r.appraisal_price)
+        ? (r.winning_price / r.appraisal_price * 100) : null;
+      if (rate === null) return false;
+      if (winRateFrom !== null && rate < winRateFrom) return false;
+      if (winRateTo   !== null && rate > winRateTo)   return false;
+    }
+
     return true;
   });
 
@@ -1329,13 +1390,13 @@ function applyAuctionFilter() {
 
 /* 필터 초기화 */
 function resetAuctionFilter() {
-  ['af-item-type','af-region','af-status','af-floor-from','af-floor-to',
-   'af-min-price-from','af-min-price-to',
-   'af-official-from','af-official-to','af-building-from','af-building-to']
-    .forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
+  ['af-item-type','af-region','af-status',
+   'af-floor-from','af-floor-to','af-building-from','af-building-to',
+   'af-bid-date-from','af-bid-date-to',
+   'af-min-price-from','af-min-price-to','af-official-from','af-official-to',
+   'af-winning-price-from','af-winning-price-to',
+   'af-winning-rate-from','af-winning-rate-to']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   applyAuctionFilter();
 }
 
@@ -3079,6 +3140,9 @@ function onRefreshSiteChange() {
 
 function closeRefreshModal() {
   document.getElementById('refresh-modal').style.display = 'none';
+  const prog = document.getElementById('refresh-progress');
+  const bar  = document.getElementById('refresh-progress-bar');
+  if (prog) { prog.style.display = 'none'; bar.style.width = '0%'; }
 }
 
 function openAuctionLoginWindow() {
@@ -3090,47 +3154,102 @@ function openAuctionLoginWindow() {
 async function startDataRefresh() {
   const site   = document.querySelector('input[name="refresh-site"]:checked')?.value;
   const cookie = document.getElementById('refresh-cookie-input').value.trim();
-  const result = document.getElementById('refresh-result');
+  const result   = document.getElementById('refresh-result');
+  const progress = document.getElementById('refresh-progress');
+  const progBar  = document.getElementById('refresh-progress-bar');
+  const progText = document.getElementById('refresh-progress-text');
+  const progPct  = document.getElementById('refresh-progress-pct');
 
   if (!site)   { showToast('사이트를 선택해주세요.', 'error'); return; }
   if (!cookie) { showToast('쿠키 값을 입력해주세요.', 'error'); return; }
-  _savedCookies[site] = cookie;  // 입력값 저장
+  _savedCookies[site] = cookie;
 
   const btn = document.getElementById('refresh-start-btn');
   btn.disabled = true;
   btn.textContent = '갱신 중…';
   result.style.display = 'none';
+  progress.style.display = '';
+  progBar.style.width = '0%';
+  progText.textContent = '연결 중…';
+  progPct.textContent = '';
+
+  const isAuction = _refreshContext === 'auction';
+  const selected  = isAuction ? auctionSelected : myAuctionSelected;
+  const ids       = selected.size > 0 ? [...selected] : null;
+  const apiUrl    = isAuction ? '/api/auction/refresh' : '/api/my-auction/refresh';
 
   try {
-    const isAuction = _refreshContext === 'auction';
-    const selected  = isAuction ? auctionSelected : myAuctionSelected;
-    const ids       = selected.size > 0 ? [...selected] : null;
-    const apiUrl    = isAuction ? '/api/auction/refresh' : '/api/my-auction/refresh';
-
-    const res  = await fetch(apiUrl, {
+    const res = await fetch(apiUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ site, cookie, ids }),
     });
-    const data = await res.json();
 
-    if (!res.ok) throw new Error(data.error || '서버 오류');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `서버 오류 (${res.status})`);
+    }
 
-    const { updated, skipped, failed, details } = data;
-    result.className = 'refresh-result refresh-result--success';
-    result.innerHTML = `
-      <strong>갱신 완료</strong><br>
-      ✅ 업데이트: ${updated}건 &nbsp;
-      ⏭ 변동없음: ${skipped}건 &nbsp;
-      ❌ 실패: ${failed}건
-      ${details?.length ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px">상세 내역</summary>
-        <div style="margin-top:6px;font-size:12px;max-height:180px;overflow-y:auto">
-          ${details.map(d => `<div>${d.case_no}: ${d.msg}</div>`).join('')}
-        </div></details>` : ''}
-    `;
-    result.style.display = '';
-    if (isAuction) loadAuctions(); else loadMyAuctions();
+    // SSE 스트림 읽기
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+    let   total   = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // 두 줄바꿈으로 SSE 이벤트 분리
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop(); // 미완성 조각 보존
+
+      for (const part of parts) {
+        const dataLine = part.split('\n').find(l => l.startsWith('data: '));
+        if (!dataLine) continue;
+        let evt;
+        try { evt = JSON.parse(dataLine.slice(6)); } catch { continue; }
+
+        if (evt.type === 'start') {
+          total = evt.total;
+          progText.textContent = `0 / ${total}건`;
+          progPct.textContent = '0%';
+
+        } else if (evt.type === 'progress') {
+          const pct = total > 0 ? Math.round(evt.done / total * 100) : 0;
+          progBar.style.width = pct + '%';
+          progText.textContent = `${evt.done} / ${total}건  ✅${evt.updated}  ⏭${evt.skipped}  ❌${evt.failed}`;
+          progPct.textContent = pct + '%';
+          await new Promise(r => requestAnimationFrame(r)); // 브라우저 렌더링 양보
+
+        } else if (evt.type === 'complete') {
+          progBar.style.width = '100%';
+          progText.textContent = '완료';
+          progPct.textContent = '100%';
+
+          const { updated, skipped, failed, details } = evt;
+          result.className = 'refresh-result refresh-result--success';
+          result.innerHTML = `
+            <strong>갱신 완료</strong><br>
+            ✅ 업데이트: ${updated}건 &nbsp;
+            ⏭ 변동없음: ${skipped}건 &nbsp;
+            ❌ 실패: ${failed}건
+            ${details?.length ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px">상세 내역</summary>
+              <div style="margin-top:6px;font-size:12px;max-height:180px;overflow-y:auto">
+                ${details.map(d => `<div>${d.case_no}: ${d.msg}</div>`).join('')}
+              </div></details>` : ''}
+          `;
+          result.style.display = '';
+          if (isAuction) loadAuctions(); else loadMyAuctions();
+
+        } else if (evt.type === 'error') {
+          throw new Error(evt.error || '갱신 오류');
+        }
+      }
+    }
   } catch (e) {
+    progress.style.display = 'none';
     result.className = 'refresh-result refresh-result--error';
     result.innerHTML = `<strong>오류</strong><br>${e.message}`;
     result.style.display = '';

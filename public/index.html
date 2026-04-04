@@ -127,7 +127,21 @@
             </div>
           </div>
 
-          <div class="form-section form-section--region">
+          <!-- 진행중 탭 전용 -->
+          <div id="af-bid-date-section" class="form-section form-section--filter">
+            <div class="form-section-header">입찰일</div>
+            <div class="section-grid" style="grid-template-columns:1fr">
+              <div class="form-group">
+                <div class="area-range-group">
+                  <input type="date" id="af-bid-date-from">
+                  <span class="range-sep">~</span>
+                  <input type="date" id="af-bid-date-to">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="af-active-price-section" class="form-section form-section--region">
             <div class="form-section-header">가격 범위 (만원)</div>
             <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
@@ -144,6 +158,33 @@
                   <input type="number" id="af-official-from" placeholder="최소" min="0" step="100">
                   <span class="range-sep">~</span>
                   <input type="number" id="af-official-to" placeholder="최대" min="0" step="100">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 낙찰·종결 탭 전용 -->
+          <div id="af-winning-price-section" class="form-section form-section--region" style="display:none">
+            <div class="form-section-header">낙찰가 범위 (만원)</div>
+            <div class="section-grid" style="grid-template-columns:1fr">
+              <div class="form-group">
+                <div class="area-range-group">
+                  <input type="number" id="af-winning-price-from" placeholder="최소" min="0" step="100">
+                  <span class="range-sep">~</span>
+                  <input type="number" id="af-winning-price-to" placeholder="최대" min="0" step="100">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="af-winning-rate-section" class="form-section form-section--filter" style="display:none">
+            <div class="form-section-header">낙찰률 (%)</div>
+            <div class="section-grid" style="grid-template-columns:1fr">
+              <div class="form-group">
+                <div class="area-range-group">
+                  <input type="number" id="af-winning-rate-from" placeholder="최소" min="0" max="200" step="1">
+                  <span class="range-sep">~</span>
+                  <input type="number" id="af-winning-rate-to" placeholder="최대" min="0" max="200" step="1">
                 </div>
               </div>
             </div>
@@ -1159,6 +1200,17 @@
             <strong>쿠키 값 확인</strong>
             <input type="text" id="refresh-cookie-input" class="refresh-cookie-input" placeholder="자동 입력 또는 직접 붙여넣기">
           </div>
+        </div>
+      </div>
+
+      <!-- 진행 표시 -->
+      <div id="refresh-progress" style="display:none;margin:12px 0">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+          <span id="refresh-progress-text">준비 중…</span>
+          <span id="refresh-progress-pct"></span>
+        </div>
+        <div style="background:var(--border-color,#e5e7eb);border-radius:4px;height:8px;overflow:hidden">
+          <div id="refresh-progress-bar" style="height:100%;background:var(--primary,#2563eb);width:0%;transition:width 0.2s"></div>
         </div>
       </div>
 
