@@ -1208,6 +1208,7 @@ function updateAuctionStatusOptions(tab) {
     : [['', '전체'], ['낙찰', '낙찰'], ['변경/낙찰', '변경/낙찰'], ['매각', '매각'], ['취하', '취하'], ['기각', '기각'], ['정지', '정지'], ['불허가', '불허가']];
   sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   sel.value = opts.some(([v]) => v === prev) ? prev : '';
+  toggleAuctionFailcountSection();
 }
 
 /* 탭에 따라 필터 섹션 show/hide + 숨겨진 값 초기화 */
@@ -1315,6 +1316,8 @@ function applyAuctionFilter() {
   const itemType    = document.getElementById('af-item-type')?.value || '';
   const region      = document.getElementById('af-region')?.value   || '';
   const status      = document.getElementById('af-status')?.value   || '';
+  const failCountFrom = document.getElementById('af-failcount-from')?.value !== '' ? parseInt(document.getElementById('af-failcount-from')?.value, 10) : null;
+  const failCountTo   = document.getElementById('af-failcount-to')?.value   !== '' ? parseInt(document.getElementById('af-failcount-to')?.value,   10) : null;
   const floorFrom   = document.getElementById('af-floor-from')?.value !== '' ? parseInt(document.getElementById('af-floor-from')?.value, 10) : null;
   const floorTo     = document.getElementById('af-floor-to')?.value   !== '' ? parseInt(document.getElementById('af-floor-to')?.value,   10) : null;
   const buildingFrom = parseFloat(document.getElementById('af-building-from')?.value)  || null;
@@ -1343,6 +1346,11 @@ function applyAuctionFilter() {
     if (status) {
       const s = r.status || '';
       if (!(status === '유찰' ? s.startsWith('유찰') : s === status)) return false;
+      if (status === '유찰' && (failCountFrom !== null || failCountTo !== null)) {
+        const cnt = parseInt(s.slice(2)) || 0;
+        if (failCountFrom !== null && cnt < failCountFrom) return false;
+        if (failCountTo   !== null && cnt > failCountTo)   return false;
+      }
     }
     if (floorFrom    !== null && (r.floor == null || r.floor < floorFrom)) return false;
     if (floorTo      !== null && (r.floor == null || r.floor > floorTo))   return false;
@@ -1388,6 +1396,26 @@ function applyAuctionFilter() {
   renderAuctionTable();
 }
 
+function toggleAuctionFailcountSection() {
+  const sec = document.getElementById('af-failcount-section');
+  if (!sec) return;
+  const show = document.getElementById('af-status')?.value === '유찰';
+  sec.style.display = show ? '' : 'none';
+  if (!show) {
+    ['af-failcount-from','af-failcount-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  }
+}
+
+function toggleMyAuctionFailcountSection() {
+  const sec = document.getElementById('maf-failcount-section');
+  if (!sec) return;
+  const show = document.getElementById('maf-status')?.value === '유찰';
+  sec.style.display = show ? '' : 'none';
+  if (!show) {
+    ['maf-failcount-from','maf-failcount-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  }
+}
+
 /* 필터 초기화 */
 function resetAuctionFilter() {
   ['af-item-type','af-region','af-status',
@@ -1395,8 +1423,11 @@ function resetAuctionFilter() {
    'af-bid-date-from','af-bid-date-to',
    'af-min-price-from','af-min-price-to','af-official-from','af-official-to',
    'af-winning-price-from','af-winning-price-to',
-   'af-winning-rate-from','af-winning-rate-to']
+   'af-winning-rate-from','af-winning-rate-to',
+   'af-failcount-from','af-failcount-to']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const sec = document.getElementById('af-failcount-section');
+  if (sec) sec.style.display = 'none';
   applyAuctionFilter();
 }
 
@@ -2069,6 +2100,7 @@ function updateMyAuctionStatusOptions(tab) {
   } else {
     ['maf-min-from', 'maf-min-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   }
+  toggleMyAuctionFailcountSection();
 }
 
 /* 물건종류·지역 드롭다운을 실제 데이터 기준으로 동적 생성 */
@@ -2158,6 +2190,8 @@ function applyMyAuctionFilter() {
   const itemType = gv('maf-item-type');
   const region   = gv('maf-region');
   const status   = gv('maf-status');
+  const mafFailCountFrom = gn('maf-failcount-from') !== null ? parseInt(document.getElementById('maf-failcount-from')?.value, 10) : null;
+  const mafFailCountTo   = gn('maf-failcount-to')   !== null ? parseInt(document.getElementById('maf-failcount-to')?.value,   10) : null;
   const areaFrom = gn('maf-area-from');
   const areaTo   = gn('maf-area-to');
   const bidFrom  = gv('maf-bid-from');
@@ -2174,6 +2208,11 @@ function applyMyAuctionFilter() {
     if (status) {
       const s = r.my_status || '';
       if (!(status === '유찰' ? s.startsWith('유찰') : s === status)) return false;
+      if (status === '유찰' && (mafFailCountFrom !== null || mafFailCountTo !== null)) {
+        const cnt = parseInt(s.slice(2)) || 0;
+        if (mafFailCountFrom !== null && cnt < mafFailCountFrom) return false;
+        if (mafFailCountTo   !== null && cnt > mafFailCountTo)   return false;
+      }
     }
     if (areaFrom !== null && (r.building_area == null || r.building_area < areaFrom)) return false;
     if (areaTo   !== null && (r.building_area == null || r.building_area > areaTo))   return false;
@@ -2204,8 +2243,11 @@ function applyMyAuctionFilter() {
 function resetMyAuctionFilter() {
   ['maf-search', 'maf-item-type', 'maf-region', 'maf-status',
    'maf-area-from', 'maf-area-to', 'maf-bid-from', 'maf-bid-to',
-   'maf-min-from', 'maf-min-to', 'maf-win-from', 'maf-win-to']
+   'maf-min-from', 'maf-min-to', 'maf-win-from', 'maf-win-to',
+   'maf-failcount-from', 'maf-failcount-to']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const sec = document.getElementById('maf-failcount-section');
+  if (sec) sec.style.display = 'none';
   applyMyAuctionFilter();
 }
 
@@ -3144,6 +3186,15 @@ function closeRefreshModal() {
   const prog = document.getElementById('refresh-progress');
   const bar  = document.getElementById('refresh-progress-bar');
   if (prog) { prog.style.display = 'none'; bar.style.width = '0%'; }
+}
+
+function openAuctionGuideModal() {
+  document.getElementById('auction-guide-backdrop').style.display = 'flex';
+}
+
+function closeAuctionGuideModal(e) {
+  if (e && e.target !== document.getElementById('auction-guide-backdrop')) return;
+  document.getElementById('auction-guide-backdrop').style.display = 'none';
 }
 
 function openAuctionLoginWindow() {

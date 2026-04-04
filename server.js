@@ -931,22 +931,22 @@ function parseAuctionHtml(html, site) {
     const gamM = html.match(/감정가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
     const wonM = html.match(/낙찰가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
 
-    // 상태 파싱: 낙찰가(숫자) 존재 → 매각, 유찰 이력보다 우선
+    // 상태 파싱: 종결 상태를 유찰 이력보다 먼저 확인 (유찰 후 취하된 물건 오분류 방지)
     let status = null;
     if (wonM) {
       status = '매각';
-    } else {
+    } else if (/취하/.test(html))            { status = '취하';    }
+    else if (/기각/.test(html))              { status = '기각';    }
+    else if (/정지/.test(html))              { status = '정지';    }
+    else if (/불허가/.test(html))            { status = '불허가';  }
+    else if (/배당종결/.test(html))          { status = '배당종결';}
+    else if (/낙찰/.test(html))              { status = '낙찰';    }
+    else {
       const yuchalM = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
       if (yuchalM)                           { status = `유찰${yuchalM[1]}회`; }
       else if (/유찰/.test(html))            { status = '유찰';    }
-      else if (/취하/.test(html))            { status = '취하';    }
-      else if (/기각/.test(html))            { status = '기각';    }
-      else if (/정지/.test(html))            { status = '정지';    }
-      else if (/불허가/.test(html))          { status = '불허가';  }
-      else if (/배당종결/.test(html))        { status = '배당종결';}
       else if (/미진행/.test(html))          { status = '미진행';  }
       else if (/변경/.test(html))            { status = '변경';    }
-      else if (/낙찰/.test(html))            { status = '낙찰';    }
       else if (/신건/.test(html))            { status = '신건';    }
       else if (/진행물건|진행중/.test(html)) { status = '진행중';  }
     }
@@ -969,18 +969,18 @@ function parseAuctionHtml(html, site) {
   let status = null;
   if (wonM) {
     status = '매각';
-  } else {
+  } else if (/취하/.test(html))            { status = '취하';    }
+  else if (/기각/.test(html))              { status = '기각';    }
+  else if (/정지/.test(html))              { status = '정지';    }
+  else if (/불허가/.test(html))            { status = '불허가';  }
+  else if (/배당종결/.test(html))          { status = '배당종결';}
+  else if (/낙찰/.test(html))              { status = '낙찰';    }
+  else {
     const yuchalMT = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
     if (yuchalMT)                          { status = `유찰${yuchalMT[1]}회`; }
     else if (/유찰/.test(html))            { status = '유찰';    }
-    else if (/취하/.test(html))            { status = '취하';    }
-    else if (/기각/.test(html))            { status = '기각';    }
-    else if (/정지/.test(html))            { status = '정지';    }
-    else if (/불허가/.test(html))          { status = '불허가';  }
-    else if (/배당종결/.test(html))        { status = '배당종결';}
     else if (/미진행/.test(html))          { status = '미진행';  }
     else if (/변경/.test(html))            { status = '변경';    }
-    else if (/낙찰/.test(html))            { status = '낙찰';    }
     else if (/신건/.test(html))            { status = '신건';    }
     else if (/진행물건|진행중/.test(html)) { status = '진행중';  }
   }

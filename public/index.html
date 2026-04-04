@@ -117,12 +117,25 @@
             <div class="form-section-header">상태</div>
             <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
-                <select id="af-status">
+                <select id="af-status" onchange="toggleAuctionFailcountSection()">
                   <option value="">전체</option>
                   <option value="신건">신건</option>
                   <option value="진행중">진행중</option>
                   <option value="유찰">유찰</option>
                 </select>
+              </div>
+            </div>
+          </div>
+
+          <div id="af-failcount-section" class="form-section form-section--filter" style="display:none">
+            <div class="form-section-header">유찰 횟수 (회)</div>
+            <div class="section-grid" style="grid-template-columns:1fr">
+              <div class="form-group">
+                <div class="area-range-group">
+                  <input type="number" id="af-failcount-from" placeholder="최소" min="1" step="1">
+                  <span class="range-sep">~</span>
+                  <input type="number" id="af-failcount-to" placeholder="최대" min="1" step="1">
+                </div>
               </div>
             </div>
           </div>
@@ -326,11 +339,24 @@
             <div class="form-section-header">상태</div>
             <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
-                <select id="maf-status">
+                <select id="maf-status" onchange="toggleMyAuctionFailcountSection()">
                   <option value="">전체</option>
                   <option value="진행중">진행중</option>
                   <option value="유찰">유찰</option>
                 </select>
+              </div>
+            </div>
+          </div>
+
+          <div id="maf-failcount-section" class="form-section form-section--filter" style="display:none">
+            <div class="form-section-header">유찰 횟수 (회)</div>
+            <div class="section-grid" style="grid-template-columns:1fr">
+              <div class="form-group">
+                <div class="area-range-group">
+                  <input type="number" id="maf-failcount-from" placeholder="최소" min="1" step="1">
+                  <span class="range-sep">~</span>
+                  <input type="number" id="maf-failcount-to" placeholder="최대" min="1" step="1">
+                </div>
               </div>
             </div>
           </div>
@@ -665,6 +691,7 @@
             <h2 style="margin:0;font-size:16px;font-weight:700">부동산경매(안전한물건)</h2>
             <span style="margin-left:8px;font-size:12px;color:#888;font-weight:400">대항력은 있지만 대항력 없는 물건</span>
             <span class="badge" id="auction-badge" style="margin-left:4px"></span>
+            <button class="btn-guide" onclick="openAuctionGuideModal()" title="화면 설명 보기">?</button>
           </div>
           <div class="auction-header-actions">
             <input type="file" id="auction-file-input" accept=".xlsx,.xls" style="display:none" onchange="handleAuctionUpload(this)">
@@ -1525,5 +1552,87 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="app.js"></script>
+
+  <!-- 부동산경매 안내 모달 -->
+  <div id="auction-guide-backdrop" class="modal-backdrop" style="display:none" onclick="closeAuctionGuideModal(event)">
+    <div class="modal modal--guide" onclick="event.stopPropagation()">
+      <div class="guide-modal-header">
+        <div class="guide-modal-title">
+          <span class="guide-icon">?</span>
+          부동산경매(안전한물건) 사용 가이드
+        </div>
+        <button class="btn-modal-close" onclick="closeAuctionGuideModal()">✕</button>
+      </div>
+      <div class="guide-modal-body">
+
+        <div class="guide-section">
+          <div class="guide-section-title">이 화면은 무엇인가요?</div>
+          <p class="guide-text">
+            경매에 나온 부동산 물건들을 엑셀로 업로드하고, 전세·매매 시세를 입력해
+            <strong>수익이 나는 물건을 빠르게 찾는 화면</strong>입니다.<br>
+            <strong>안전한물건</strong>이란, 주인장이 권리상 문제가 없는 물건만 쏙쏙 골라서 업로드한 물건을 의미합니다.
+          </p>
+        </div>
+
+        <div class="guide-section">
+          <div class="guide-section-title">시작하는 방법 (3단계)</div>
+          <ol class="guide-steps">
+            <li><strong>양식 다운로드</strong> — 오른쪽 상단 "양식 다운로드" 버튼으로 엑셀 양식을 받아 물건 정보를 입력합니다.</li>
+            <li><strong>엑셀 업로드</strong> — 작성한 파일을 "엑셀 업로드" 버튼으로 올립니다.<br>
+              <span class="guide-tip">파일명이 <em>'물건추천'</em>으로 시작하면 기존 데이터와 자동으로 병합·갱신됩니다.</span></li>
+            <li><strong>시세 입력</strong> — 전세시세·매매시세 셀을 클릭해 현재 시장가를 직접 입력하면 차익이 자동 계산됩니다.</li>
+          </ol>
+        </div>
+
+        <div class="guide-section">
+          <div class="guide-section-title">주요 항목 설명</div>
+          <table class="guide-table">
+            <thead><tr><th>항목</th><th>설명</th></tr></thead>
+            <tbody>
+              <tr><td>감정가</td><td>법원이 평가한 물건의 가치</td></tr>
+              <tr><td>최저가</td><td>이번 입찰에서 낙찰 가능한 최저 금액 (유찰될수록 낮아짐)</td></tr>
+              <tr><td>공시가</td><td>정부가 공시한 기준 가격 (세금 계산 기준)</td></tr>
+              <tr><td>전세시세</td><td>해당 물건의 현재 전세 시장가 — 직접 입력</td></tr>
+              <tr class="guide-row-highlight"><td>전세차익</td><td><strong>전세시세 − 최저가</strong> → 양수(초록)면 전세금으로 낙찰가 충당 가능</td></tr>
+              <tr><td>매매시세</td><td>해당 물건의 현재 매매 시장가 — 직접 입력</td></tr>
+              <tr class="guide-row-highlight"><td>매매차익</td><td><strong>매매시세 − 최저가</strong> → 양수(초록)면 낙찰 후 매매 시 수익 발생</td></tr>
+              <tr><td>낙찰률</td><td>낙찰가 ÷ 감정가 × 100 (낮을수록 싸게 낙찰)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="guide-section">
+          <div class="guide-section-title">상태 구분</div>
+          <table class="guide-table">
+            <thead><tr><th>상태</th><th>의미</th></tr></thead>
+            <tbody>
+              <tr><td><span class="status-badge badge-active">신건</span></td><td>처음 입찰에 올라온 물건</td></tr>
+              <tr><td><span class="status-badge badge-active">진행중</span></td><td>입찰 절차가 진행 중인 물건</td></tr>
+              <tr><td><span class="status-badge badge-active">유찰N</span></td><td>N번 유찰된 물건 — 유찰 횟수만큼 최저가 하락</td></tr>
+              <tr><td><span class="status-badge badge-won">낙찰</span></td><td>입찰 완료된 물건</td></tr>
+              <tr><td><span class="status-badge badge-neutral">취하·기각</span></td><td>경매가 취소되거나 각하된 물건</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="guide-section">
+          <div class="guide-section-title">탭 구분</div>
+          <ul class="guide-list">
+            <li><strong>진행중</strong> — 아직 입찰이 열려있는 물건. 입찰일·최저가 기준으로 필터할 수 있습니다.</li>
+            <li><strong>낙찰·종결</strong> — 낙찰되었거나 취하·기각 등으로 마감된 물건. 낙찰가·낙찰률로 필터 가능합니다.</li>
+          </ul>
+        </div>
+
+        <div class="guide-section">
+          <div class="guide-section-title">나만의 경매물건으로 저장</div>
+          <p class="guide-text">
+            관심 물건을 체크박스로 선택하고 <strong>"나만의 경매물건으로 저장"</strong> 버튼을 누르면,
+            별도 탭(나만의 경매물건)에서 <strong>수익률 분석(📊)</strong>을 포함한 심층 분석이 가능합니다.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
 </body>
 </html>
