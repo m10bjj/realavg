@@ -1158,32 +1158,39 @@ let currentView = 'realestate';
 function switchView(view) {
   currentView = view;
 
-  const searchBody        = document.getElementById('sidebar-search-body');
-  const realestateView    = document.getElementById('realestate-view');
-  const auctionView       = document.getElementById('auction-view');
-  const myAuctionView     = document.getElementById('my-auction-view');
-  const naverView         = document.getElementById('naver-view');
-  const historyBtn        = document.getElementById('history-btn');
-  const auctionFilterBody = document.getElementById('sidebar-auction-filter-body');
-  const myAuctionBody     = document.getElementById('sidebar-my-auction-body');
-  const naverBody         = document.getElementById('sidebar-naver-body');
+  const searchBody           = document.getElementById('sidebar-search-body');
+  const realestateView       = document.getElementById('realestate-view');
+  const auctionView          = document.getElementById('auction-view');
+  const myAuctionView        = document.getElementById('my-auction-view');
+  const naverView            = document.getElementById('naver-view');
+  const directAuctionView    = document.getElementById('direct-auction-view');
+  const historyBtn           = document.getElementById('history-btn');
+  const auctionFilterBody    = document.getElementById('sidebar-auction-filter-body');
+  const myAuctionBody        = document.getElementById('sidebar-my-auction-body');
+  const naverBody            = document.getElementById('sidebar-naver-body');
+  const directAuctionBody    = document.getElementById('sidebar-direct-auction-body');
 
-  searchBody.style.display     = view === 'realestate' ? '' : 'none';
-  if (auctionFilterBody) auctionFilterBody.style.display = view === 'auction'    ? '' : 'none';
-  if (myAuctionBody)     myAuctionBody.style.display     = view === 'my-auction' ? '' : 'none';
-  if (naverBody)         naverBody.style.display         = view === 'naver'      ? '' : 'none';
-  realestateView.style.display = view === 'realestate' ? ''     : 'none';
-  auctionView.style.display    = view === 'auction'    ? 'flex' : 'none';
-  if (myAuctionView) myAuctionView.style.display = view === 'my-auction' ? 'flex' : 'none';
-  if (naverView)     naverView.style.display     = view === 'naver'      ? 'flex' : 'none';
+  searchBody.style.display     = view === 'realestate'     ? '' : 'none';
+  if (auctionFilterBody) auctionFilterBody.style.display   = view === 'auction'        ? '' : 'none';
+  if (myAuctionBody)     myAuctionBody.style.display       = view === 'my-auction'     ? '' : 'none';
+  if (naverBody)         naverBody.style.display           = view === 'naver'          ? '' : 'none';
+  if (directAuctionBody) directAuctionBody.style.display   = view === 'direct-auction' ? '' : 'none';
+
+  realestateView.style.display    = view === 'realestate'     ? ''     : 'none';
+  auctionView.style.display       = view === 'auction'        ? 'flex' : 'none';
+  if (myAuctionView)     myAuctionView.style.display     = view === 'my-auction'     ? 'flex' : 'none';
+  if (naverView)         naverView.style.display         = view === 'naver'          ? 'flex' : 'none';
+  if (directAuctionView) directAuctionView.style.display = view === 'direct-auction' ? 'flex' : 'none';
+
   if (historyBtn) historyBtn.style.display = view === 'realestate' ? '' : 'none';
 
   document.querySelectorAll('.sidebar-nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.view === view);
   });
 
-  if (view === 'auction')    loadAuctions();
-  if (view === 'my-auction') loadMyAuctions();
+  if (view === 'auction')        loadAuctions();
+  if (view === 'my-auction')     loadMyAuctions();
+  if (view === 'direct-auction') loadDirectAuctions();
   if (view === 'naver' && !window._naverActiveId) showNaverBoard();
 }
 
@@ -2077,7 +2084,7 @@ let myAuctionPage     = 1;
 let myAuctionPageSize = 30;
 let myAuctionTab      = 'active'; // 'active' | 'sold'
 
-const SOLD_STATUSES = new Set(['낙찰', '변경/낙찰', '매각', '취하', '기각', '정지', '불허가']);
+const SOLD_STATUSES = new Set(['낙찰', '변경/낙찰', '매각', '취하', '기각', '정지', '불허가', '배당종결']);
 const isMyAuctionSold = r => SOLD_STATUSES.has(r.my_status);
 
 function updateMyAuctionStatusOptions(tab) {
@@ -3150,13 +3157,14 @@ function copyCookieSnippet() {
   navigator.clipboard.writeText(code).then(() => showToast('코드가 복사되었습니다.', 'success'));
 }
 
-let _refreshContext = 'my-auction'; // 'my-auction' | 'auction'
+let _refreshContext = 'my-auction'; // 'my-auction' | 'auction' | 'direct-auction'
 
 function openRefreshModal(context) {
   _refreshContext = context || 'my-auction';
 
-  const isAuction = _refreshContext === 'auction';
-  const selected  = isAuction ? auctionSelected : myAuctionSelected;
+  const selected = _refreshContext === 'auction'        ? auctionSelected
+                 : _refreshContext === 'direct-auction' ? directAuctionSelected
+                 : myAuctionSelected;
 
   if (selected.size === 0) {
     showToast('갱신할 항목을 먼저 선택해주세요.', 'error');
@@ -3276,10 +3284,13 @@ async function startDataRefresh() {
   progText.textContent = '연결 중…';
   progPct.textContent = '';
 
-  const isAuction = _refreshContext === 'auction';
-  const selected  = isAuction ? auctionSelected : myAuctionSelected;
-  const ids       = selected.size > 0 ? [...selected] : null;
-  const apiUrl    = isAuction ? '/api/auction/refresh' : '/api/my-auction/refresh';
+  const selected = _refreshContext === 'auction'        ? auctionSelected
+               : _refreshContext === 'direct-auction' ? directAuctionSelected
+               : myAuctionSelected;
+  const ids    = selected.size > 0 ? [...selected] : null;
+  const apiUrl = _refreshContext === 'auction'        ? '/api/auction/refresh'
+               : _refreshContext === 'direct-auction' ? '/api/direct-auction/refresh'
+               : '/api/my-auction/refresh';
 
   try {
     const res = await fetch(apiUrl, {
@@ -3344,7 +3355,9 @@ async function startDataRefresh() {
               </div></details>` : ''}
           `;
           result.style.display = '';
-          if (isAuction) loadAuctions(); else loadMyAuctions();
+          if (_refreshContext === 'auction') loadAuctions();
+          else if (_refreshContext === 'direct-auction') loadDirectAuctions();
+          else loadMyAuctions();
 
         } else if (evt.type === 'error') {
           throw new Error(evt.error || '갱신 오류');
@@ -3856,5 +3869,500 @@ async function saveProfitAnalysis() {
   } catch (e) {
     if (statusEl) statusEl.textContent = '';
     showToast('저장 실패: ' + e.message, 'error');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   부동산경매(직접조회)
+═══════════════════════════════════════════════════════ */
+let directAuctionData     = [];
+let directAuctionFiltered = [];
+let directAuctionSelected = new Set();
+let directAuctionPage     = 1;
+let directAuctionPageSize = 30;
+let directAuctionTab      = 'active';
+
+const isDirectAuctionSold = r => SOLD_STATUSES.has(r.status);
+
+async function loadDirectAuctions() {
+  try {
+    const data = await fetch('/api/direct-auction').then(r => r.json());
+    directAuctionData = data.map((r, i) => ({ ...r, _seq: i + 1 }));
+    populateDirectAuctionFilters();
+    applyDirectAuctionFilter();
+  } catch (e) {
+    showToast('직접조회 데이터 로드 실패: ' + e.message, 'error');
+  }
+}
+
+function populateDirectAuctionFilters() {
+  const types   = [...new Set(directAuctionData.map(r => r.item_type).filter(Boolean))].sort();
+  const regions = [...new Set(directAuctionData.map(r => r.region).filter(Boolean))].sort();
+  const selType   = document.getElementById('daf-item-type');
+  const selRegion = document.getElementById('daf-region');
+  if (!selType || !selRegion) return;
+  const prevType = selType.value, prevReg = selRegion.value;
+  selType.innerHTML   = '<option value="">전체</option>' + types.map(t => `<option value="${t}">${t}</option>`).join('');
+  selRegion.innerHTML = '<option value="">전체</option>' + regions.map(r => `<option value="${r}">${r}</option>`).join('');
+  if (types.includes(prevType))     selType.value   = prevType;
+  if (regions.includes(prevReg))    selRegion.value = prevReg;
+}
+
+function updateDirectAuctionStatusOptions(tab) {
+  const sel = document.getElementById('daf-status');
+  if (!sel) return;
+  const prev = sel.value;
+  const opts = tab === 'active'
+    ? [['', '전체'], ['신건', '신건'], ['진행중', '진행중'], ['유찰', '유찰']]
+    : [['', '전체'], ['낙찰', '낙찰'], ['변경/낙찰', '변경/낙찰'], ['매각', '매각'], ['취하', '취하'], ['기각', '기각'], ['정지', '정지'], ['불허가', '불허가'], ['배당종결', '배당종결']];
+  sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  sel.value = opts.some(([v]) => v === prev) ? prev : '';
+  toggleDirectAuctionFailcountSection();
+}
+
+function updateDirectAuctionFiltersForTab(tab) {
+  const isActive = tab === 'active';
+  const show = (id, v) => { const el = document.getElementById(id); if (el) el.style.display = v ? '' : 'none'; };
+  show('daf-bid-date-section', isActive);
+  show('daf-active-price-section', isActive);
+  show('daf-failcount-section', false);
+  show('daf-winning-price-section', !isActive);
+  show('daf-winning-rate-section', !isActive);
+  if (!isActive) {
+    ['daf-bid-date-from','daf-bid-date-to','daf-min-price-from','daf-min-price-to','daf-official-from','daf-official-to','daf-failcount-from','daf-failcount-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  } else {
+    ['daf-winning-price-from','daf-winning-price-to','daf-winning-rate-from','daf-winning-rate-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  }
+}
+
+function toggleDirectAuctionFailcountSection() {
+  const show = document.getElementById('daf-status')?.value === '유찰';
+  const el = document.getElementById('daf-failcount-section');
+  if (el) el.style.display = show ? '' : 'none';
+}
+
+function setDirectAuctionTab(tab) {
+  directAuctionTab = tab;
+  directAuctionSelected.clear();
+  directAuctionPage = 1;
+  document.getElementById('dat-tab-active').classList.toggle('is-active', tab === 'active');
+  document.getElementById('dat-tab-sold').classList.toggle('is-active', tab === 'sold');
+  updateDirectAuctionStatusOptions(tab);
+  updateDirectAuctionFiltersForTab(tab);
+  applyDirectAuctionFilter();
+}
+
+function applyDirectAuctionFilter() {
+  const activeCount = directAuctionData.filter(r => !isDirectAuctionSold(r)).length;
+  const soldCount   = directAuctionData.filter(isDirectAuctionSold).length;
+  const tabActive = document.getElementById('dat-tab-active-count');
+  const tabSold   = document.getElementById('dat-tab-sold-count');
+  if (tabActive) tabActive.textContent = activeCount;
+  if (tabSold)   tabSold.textContent   = soldCount;
+
+  const base = directAuctionData.filter(directAuctionTab === 'sold' ? isDirectAuctionSold : r => !isDirectAuctionSold(r));
+
+  const gv = id => document.getElementById(id)?.value?.trim() || '';
+  const gn = id => { const v = parseFloat(gv(id)); return isNaN(v) ? null : v; };
+
+  const itemType    = gv('daf-item-type');
+  const region      = gv('daf-region');
+  const status      = gv('daf-status');
+  const failFrom    = gn('daf-failcount-from');
+  const failTo      = gn('daf-failcount-to');
+  const buildFrom   = gn('daf-building-from');
+  const buildTo     = gn('daf-building-to');
+
+  let bidDateFrom, bidDateTo, minFrom, minTo, offFrom, offTo, winFrom, winTo, rateFrom, rateTo;
+  if (directAuctionTab === 'active') {
+    bidDateFrom = gv('daf-bid-date-from'); bidDateTo = gv('daf-bid-date-to');
+    minFrom = gn('daf-min-price-from');    minTo     = gn('daf-min-price-to');
+    offFrom = gn('daf-official-from');     offTo     = gn('daf-official-to');
+  } else {
+    winFrom  = gn('daf-winning-price-from'); winTo   = gn('daf-winning-price-to');
+    rateFrom = gn('daf-winning-rate-from');  rateTo  = gn('daf-winning-rate-to');
+  }
+
+  directAuctionFiltered = base.filter(r => {
+    if (itemType && r.item_type !== itemType) return false;
+    if (region   && r.region   !== region)   return false;
+    if (status) {
+      const s = r.status || '';
+      if (!(status === '유찰' ? s.startsWith('유찰') : s === status)) return false;
+      if (status === '유찰' && (failFrom !== null || failTo !== null)) {
+        const n = parseInt((s.match(/\d+/) || ['0'])[0], 10);
+        if (failFrom !== null && n < failFrom) return false;
+        if (failTo   !== null && n > failTo)   return false;
+      }
+    }
+    if (buildFrom !== null && (r.building_area == null || r.building_area < buildFrom)) return false;
+    if (buildTo   !== null && (r.building_area == null || r.building_area > buildTo))   return false;
+    if (directAuctionTab === 'active') {
+      if (bidDateFrom && r.bid_date && r.bid_date < bidDateFrom) return false;
+      if (bidDateTo   && r.bid_date && r.bid_date > bidDateTo)   return false;
+      if (minFrom !== null && (r.min_price == null || r.min_price < minFrom)) return false;
+      if (minTo   !== null && (r.min_price == null || r.min_price > minTo))   return false;
+      if (offFrom !== null && (r.official_price == null || r.official_price < offFrom)) return false;
+      if (offTo   !== null && (r.official_price == null || r.official_price > offTo))   return false;
+    } else {
+      if (winFrom !== null && (r.winning_price == null || r.winning_price < winFrom)) return false;
+      if (winTo   !== null && (r.winning_price == null || r.winning_price > winTo))   return false;
+      if (rateFrom !== null || rateTo !== null) {
+        const rate = (r.winning_price && r.appraisal_price) ? r.winning_price / r.appraisal_price * 100 : null;
+        if (rateFrom !== null && (rate == null || rate < rateFrom)) return false;
+        if (rateTo   !== null && (rate == null || rate > rateTo))   return false;
+      }
+    }
+    return true;
+  });
+
+  const cnt = document.getElementById('daf-result-count');
+  if (cnt) cnt.textContent = directAuctionFiltered.length ? `${directAuctionFiltered.length}건` : '';
+  directAuctionPage = 1;
+  renderDirectAuctionTable();
+}
+
+function resetDirectAuctionFilter() {
+  ['daf-item-type','daf-region','daf-status',
+   'daf-failcount-from','daf-failcount-to',
+   'daf-bid-date-from','daf-bid-date-to',
+   'daf-min-price-from','daf-min-price-to',
+   'daf-official-from','daf-official-to',
+   'daf-winning-price-from','daf-winning-price-to',
+   'daf-winning-rate-from','daf-winning-rate-to',
+   'daf-building-from','daf-building-to',
+  ].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  applyDirectAuctionFilter();
+}
+
+function renderDirectAuctionTable() {
+  const tbody  = document.getElementById('da-tbody');
+  const badge  = document.getElementById('direct-auction-badge');
+  const selBtn = document.getElementById('da-delete-sel-btn');
+  const selAll = document.getElementById('da-sel-all');
+  const saveMyBtn = document.getElementById('da-save-my-btn');
+
+  const tabBase = directAuctionData.filter(directAuctionTab === 'sold' ? isDirectAuctionSold : r => !isDirectAuctionSold(r));
+  if (badge) badge.textContent = tabBase.length + '건';
+  if (selBtn) selBtn.style.display = directAuctionSelected.size > 0 ? '' : 'none';
+  if (saveMyBtn) saveMyBtn.style.display = directAuctionSelected.size > 0 ? '' : 'none';
+
+  if (!directAuctionData.length) {
+    tbody.innerHTML = '<tr><td colspan="22" class="auction-empty">데이터가 없습니다. 사이드바에서 가져오기를 실행하세요.</td></tr>';
+    document.getElementById('da-pagination').innerHTML = '';
+    document.getElementById('da-page-info').textContent = '';
+    return;
+  }
+  if (!directAuctionFiltered.length) {
+    tbody.innerHTML = '<tr><td colspan="22" class="auction-empty">조건에 맞는 데이터가 없습니다.</td></tr>';
+    document.getElementById('da-pagination').innerHTML = '';
+    document.getElementById('da-page-info').textContent = '';
+    return;
+  }
+
+  const total      = directAuctionFiltered.length;
+  const totalPages = Math.ceil(total / directAuctionPageSize);
+  if (directAuctionPage > totalPages) directAuctionPage = totalPages;
+  const start    = (directAuctionPage - 1) * directAuctionPageSize;
+  const end      = Math.min(start + directAuctionPageSize, total);
+  const pageRows = directAuctionFiltered.slice(start, end);
+
+  const pageInfo = document.getElementById('da-page-info');
+  if (pageInfo) pageInfo.textContent = `${start + 1}–${end} / 전체 ${total.toLocaleString()}건`;
+
+  if (selAll) {
+    const pageSel = pageRows.filter(r => directAuctionSelected.has(r.id)).length;
+    selAll.indeterminate = pageSel > 0 && pageSel < pageRows.length;
+    selAll.checked       = pageRows.length > 0 && pageSel === pageRows.length;
+  }
+
+  tbody.innerHTML = pageRows.map(row => {
+    const jeonsePft = calcProfit(row.jeonse_market, row.min_price);
+    const salePft   = calcProfit(row.sale_market, row.min_price);
+    const sc        = statusClass(row.status);
+    return `<tr data-id="${row.id}" class="${directAuctionSelected.has(row.id) ? 'row-selected' : ''}">
+      <td class="col-chk"><input type="checkbox" ${directAuctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleDirectAuctionRow(${row.id}, this.checked)"></td>
+      <td class="col-seq">${row._seq ?? '-'}</td>
+      <td class="col-case">${esc(row.case_no)}</td>
+      <td class="col-type">${esc(row.item_type)}</td>
+      <td class="col-region">${esc(row.region)}</td>
+      <td class="col-date">${esc(row.bid_date)}</td>
+      <td class="col-status"><span class="status-badge ${sc}">${esc(row.status) || '-'}</span></td>
+      <td class="col-price">${fmtAmt(row.appraisal_price)}</td>
+      <td class="col-price">${fmtAmt(row.winning_price)}</td>
+      <td class="col-pct">${(row.winning_price && row.appraisal_price) ? (row.winning_price / row.appraisal_price * 100).toFixed(1) + '%' : '-'}</td>
+      <td class="col-price">${fmtAmt(row.min_price)}</td>
+      <td class="col-price">${fmtAmt(row.official_price)}</td>
+      <td class="col-market">${daMarketCellHtml(row.id, 'jeonse_market', row.jeonse_market)}</td>
+      <td class="${profitCellClass(jeonsePft)}">${profitCellHtml(jeonsePft)}</td>
+      <td class="col-market">${daMarketCellHtml(row.id, 'sale_market', row.sale_market)}</td>
+      <td class="${profitCellClass(salePft)}">${profitCellHtml(salePft)}</td>
+      <td class="col-floor">${row.floor != null ? row.floor + '층' : '-'}</td>
+      <td class="col-area">${row.building_area != null ? row.building_area : '-'}</td>
+      <td class="col-area">${row.land_area != null ? row.land_area : '-'}</td>
+      <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="${naverLandUrl(row.address, row.item_type)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산 검색">N</a> ` : ''}${esc(row.address)}</td>
+      <td class="col-notes" title="${esc(row.notes)}">${esc(row.notes)}</td>
+      <td class="col-del"><button class="btn-row-del" onclick="deleteOneDirectAuction(${row.id})" title="삭제">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  tbody.onclick = e => {
+    const cell = e.target.closest('.da-market-cell');
+    if (cell) startEditDirectMarket(cell);
+  };
+
+  renderDirectAuctionPagination(totalPages);
+}
+
+function daMarketCellHtml(id, field, val) {
+  const display = val ? fmtAmt(val) : '<span class="waiting">대기</span>';
+  return `<div class="da-market-cell market-cell" data-id="${id}" data-field="${field}">
+    <span class="market-display">${display}</span>
+    <svg class="edit-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  </div>`;
+}
+
+function startEditDirectMarket(cell) {
+  if (cell.querySelector('input')) return;
+  const id      = parseInt(cell.dataset.id, 10);
+  const field   = cell.dataset.field;
+  const rowData = directAuctionData.find(r => r.id === id);
+  const curVal  = rowData ? rowData[field] : null;
+
+  const display = cell.querySelector('.market-display');
+  const icon    = cell.querySelector('.edit-icon');
+  display.style.display = 'none';
+  if (icon) icon.style.display = 'none';
+
+  const input = document.createElement('input');
+  input.type        = 'number';
+  input.className   = 'market-input';
+  input.placeholder = '만원 단위';
+  input.value       = curVal ?? '';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+
+  const save = async () => {
+    const val = input.value.trim() === '' ? null : parseInt(input.value, 10);
+    input.remove();
+    display.style.display = '';
+    if (icon) icon.style.display = '';
+    try {
+      const res = await fetch(`/api/direct-auction/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: val }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || '저장 실패');
+      if (rowData) rowData[field] = val;
+      refreshDirectAuctionRow(id);
+    } catch (e) { showToast('저장 실패: ' + e.message, 'error'); }
+  };
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { input.blur(); }
+    if (e.key === 'Escape') {
+      input.removeEventListener('blur', save);
+      input.remove();
+      display.style.display = '';
+      if (icon) icon.style.display = '';
+    }
+  });
+}
+
+function refreshDirectAuctionRow(id) {
+  const row = directAuctionData.find(r => r.id === id);
+  if (!row) return;
+  const tr = document.querySelector(`#da-tbody tr[data-id="${id}"]`);
+  if (!tr) return;
+  const jeonsePft = calcProfit(row.jeonse_market, row.min_price);
+  const salePft   = calcProfit(row.sale_market, row.min_price);
+  const cells     = tr.querySelectorAll('td');
+  cells[12].innerHTML = daMarketCellHtml(row.id, 'jeonse_market', row.jeonse_market);
+  cells[13].className = profitCellClass(jeonsePft);
+  cells[13].innerHTML = profitCellHtml(jeonsePft);
+  cells[14].innerHTML = daMarketCellHtml(row.id, 'sale_market', row.sale_market);
+  cells[15].className = profitCellClass(salePft);
+  cells[15].innerHTML = profitCellHtml(salePft);
+}
+
+function toggleDirectAuctionRow(id, checked) {
+  if (checked) directAuctionSelected.add(id);
+  else directAuctionSelected.delete(id);
+  const tr = document.querySelector(`#da-tbody tr[data-id="${id}"]`);
+  if (tr) tr.classList.toggle('row-selected', checked);
+  const selAll    = document.getElementById('da-sel-all');
+  const selBtn    = document.getElementById('da-delete-sel-btn');
+  const saveMyBtn = document.getElementById('da-save-my-btn');
+  const filteredSelected = directAuctionFiltered.filter(r => directAuctionSelected.has(r.id)).length;
+  if (selAll) selAll.indeterminate = filteredSelected > 0 && filteredSelected < directAuctionFiltered.length;
+  if (selAll) selAll.checked = directAuctionFiltered.length > 0 && filteredSelected === directAuctionFiltered.length;
+  if (selBtn)    selBtn.style.display    = directAuctionSelected.size > 0 ? '' : 'none';
+  if (saveMyBtn) saveMyBtn.style.display = directAuctionSelected.size > 0 ? '' : 'none';
+}
+
+function toggleDirectAuctionSelAll(checked) {
+  directAuctionFiltered.forEach(r => { if (checked) directAuctionSelected.add(r.id); else directAuctionSelected.delete(r.id); });
+  renderDirectAuctionTable();
+}
+
+function renderDirectAuctionPagination(totalPages) {
+  const el = document.getElementById('da-pagination');
+  if (!el) return;
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  const p   = directAuctionPage;
+  const btn = (label, page, disabled, active) =>
+    `<button class="page-btn${active ? ' active' : ''}" ${disabled ? 'disabled' : `onclick="changeDirectAuctionPage(${page})"`}>${label}</button>`;
+  let html = btn('«', 1, p === 1, false) + btn('‹', p - 1, p === 1, false);
+  const range = 2;
+  const pages = new Set([1, totalPages]);
+  for (let i = Math.max(1, p - range); i <= Math.min(totalPages, p + range); i++) pages.add(i);
+  let prev = 0;
+  [...pages].sort((a, b) => a - b).forEach(pg => {
+    if (prev && pg - prev > 1) html += `<span class="page-ellipsis">…</span>`;
+    html += btn(pg, pg, false, pg === p);
+    prev = pg;
+  });
+  html += btn('›', p + 1, p === totalPages, false) + btn('»', totalPages, p === totalPages, false);
+  el.innerHTML = html;
+}
+
+function changeDirectAuctionPage(page) {
+  directAuctionPage = page;
+  renderDirectAuctionTable();
+  document.getElementById('direct-auction-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function changeDirectAuctionPageSize() {
+  directAuctionPageSize = parseInt(document.getElementById('da-page-size').value, 10);
+  directAuctionPage = 1;
+  renderDirectAuctionTable();
+}
+
+async function deleteOneDirectAuction(id) {
+  if (!confirm('이 항목을 삭제하겠습니까?')) return;
+  try {
+    const res = await fetch(`/api/direct-auction/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error || '삭제 실패');
+    directAuctionData = directAuctionData.filter(r => r.id !== id);
+    directAuctionSelected.delete(id);
+    applyDirectAuctionFilter();
+  } catch (e) { showToast('삭제 실패: ' + e.message, 'error'); }
+}
+
+async function deleteSelectedDirectAuctions() {
+  if (directAuctionSelected.size === 0) return;
+  if (!confirm(`선택한 ${directAuctionSelected.size}건을 삭제하겠습니까?`)) return;
+  try {
+    const ids = [...directAuctionSelected];
+    const res = await fetch('/api/direct-auction/batch', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error || '삭제 실패');
+    directAuctionData = directAuctionData.filter(r => !directAuctionSelected.has(r.id));
+    directAuctionSelected.clear();
+    applyDirectAuctionFilter();
+    showToast(`${ids.length}건 삭제 완료`, 'success');
+  } catch (e) { showToast('삭제 실패: ' + e.message, 'error'); }
+}
+
+async function deleteAllDirectAuctions() {
+  if (!confirm('직접조회 데이터를 모두 삭제하겠습니까?')) return;
+  try {
+    const res = await fetch('/api/direct-auction/all', { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error || '삭제 실패');
+    directAuctionData = []; directAuctionFiltered = []; directAuctionSelected.clear();
+    renderDirectAuctionTable();
+    showToast('전체 삭제 완료', 'success');
+  } catch (e) { showToast('삭제 실패: ' + e.message, 'error'); }
+}
+
+async function saveDirectToMyAuction() {
+  if (directAuctionSelected.size === 0) return;
+  const items = directAuctionData.filter(r => directAuctionSelected.has(r.id));
+  if (!confirm(`선택한 ${items.length}건을 나만의 경매물건으로 저장하겠습니까?`)) return;
+  try {
+    const res  = await fetch('/api/my-auction', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '저장 실패');
+    showToast(`${data.count}건 저장 완료`, 'success');
+  } catch (e) { showToast('저장 오류: ' + e.message, 'error'); }
+}
+
+/* 탱크옥션 직접 크롤링 (SSE) */
+async function startDirectFetch() {
+  const ctgr = document.getElementById('da-fetch-ctgr')?.value || '0';
+  const siCd = document.getElementById('da-fetch-si')?.value  || '0';
+  const btn  = document.getElementById('da-fetch-btn');
+  const prog = document.getElementById('da-fetch-progress');
+  const bar  = document.getElementById('da-fetch-bar');
+  const text = document.getElementById('da-fetch-text');
+  const pct  = document.getElementById('da-fetch-pct');
+
+  btn.disabled = true;
+  btn.textContent = '조회 중…';
+  prog.style.display = '';
+  bar.style.width = '0%';
+  text.textContent = '연결 중…';
+  pct.textContent  = '';
+
+  try {
+    const res = await fetch('/api/direct-auction/fetch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ site: 'tankauction', ctgr, siCd }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `서버 오류 (${res.status})`);
+    }
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+    let   total   = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+        if (evt.type === 'start') {
+          total = evt.total;
+          text.textContent = `총 ${total}건 발견, 가져오는 중…`;
+        } else if (evt.type === 'progress') {
+          const p = total > 0 ? Math.round(evt.fetched / total * 80) : 0;
+          bar.style.width = p + '%';
+          text.textContent = `${evt.fetched} / ${total}건 수집 중…`;
+          pct.textContent  = p + '%';
+        } else if (evt.type === 'complete') {
+          bar.style.width  = '100%';
+          pct.textContent  = '100%';
+          text.textContent = `완료: ${evt.fetched}건 수집 / ${evt.saved}건 저장`;
+          showToast(`${evt.saved}건 저장 완료`, 'success');
+          await loadDirectAuctions();
+        } else if (evt.type === 'error') {
+          throw new Error(evt.error || '크롤링 오류');
+        }
+      }
+    }
+  } catch (e) {
+    text.textContent = '오류: ' + e.message;
+    showToast('가져오기 실패: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '가져오기';
   }
 }

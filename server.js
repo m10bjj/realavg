@@ -849,6 +849,25 @@ const _TANK_CTGR_MAP = {
   '어업권':            '401010',
   '광업권':            '401011',
 };
+// 탱크옥션 직접조회 시/도 코드
+const _TANK_SI_MAP = {
+  '전체': '0', '서울': '11', '부산': '21', '대구': '22', '인천': '23',
+  '광주': '24', '대전': '25', '울산': '26', '세종': '29', '경기': '31',
+  '강원': '32', '충북': '33', '충남': '34', '전북': '35', '전남': '36',
+  '경북': '37', '경남': '38', '제주': '39',
+};
+// 탱크옥션 직접조회 물건종류 → ctgr 코드 (전체 + 주요 분류)
+const _TANK_FETCH_CTGR = {
+  '전체':     '0',
+  '아파트':   '201013',
+  '빌라/다세대': '201015,201017,201021',
+  '단독주택': '201010',
+  '다가구':   '201011,201012',
+  '오피스텔': '201020,201111,201019',
+  '근린시설': '201110,201120,201124,201130',
+  '공장/창고':'201210,201211',
+  '토지':     '101010,101011,101012,101014,101017,101037',
+};
 
 const _REFRESH_SITE_CFG = {
   bossauction: {
@@ -1076,7 +1095,6 @@ function parseTankAuctionItem(item) {
     else if (/신건/.test(statText))   status = '신건';
     else if (/진행/.test(statText))   status = '진행중';
     else if (/변경/.test(statText))   status = '변경';
-    else if (/미진행/.test(statText)) status = '미진행';
     else if (statText)                status = statText;
   }
 
@@ -1095,6 +1113,75 @@ function parseTankAuctionItem(item) {
     official_price: toMan(item.apslAmt),
     winning_price:  null, // 비회원 비공개
     status,
+  };
+}
+
+/** 탱크옥션 AuctList item → direct_auctions 전체 컬럼 파싱 */
+function parseTankAuctionFullItem(item) {
+  const toMan = (v) => (v && typeof v === 'number') ? Math.round(v / 10000) : null;
+  const toArea평 = (v) => {
+    const f = v != null ? parseFloat(v) : null;
+    return f != null && !isNaN(f) ? Math.round(f / 3.3058 * 100) / 100 : null;
+  };
+
+  // 상태 파싱 (기존 parseTankAuctionItem과 동일)
+  const statText = (item.statNm || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  let status = null;
+  if      (/배당종결/.test(statText)) status = '배당종결';
+  else if (/취하/.test(statText))     status = '취하';
+  else if (/기각/.test(statText))     status = '기각';
+  else if (/불허가/.test(statText))   status = '불허가';
+  else if (/정지/.test(statText))     status = '정지';
+  else if (/매각/.test(statText))     status = '매각';
+  else if (/낙찰/.test(statText))     status = '낙찰';
+  else {
+    const ym = statText.match(/유찰\s*(\d+)회/);
+    if (ym)                           status = `유찰${ym[1]}회`;
+    else if (/유찰/.test(statText))   status = '유찰';
+    else if (/신건/.test(statText))   status = '신건';
+    else if (/진행/.test(statText))   status = '진행중';
+    else if (/변경/.test(statText))   status = '변경';
+    else if (statText)                status = statText;
+  }
+
+  // 입찰일 파싱
+  let bid_date = null;
+  const bd = (item.bidDt || '').trim();
+  const bdm = bd.match(/^(\d{2})\.(\d{2})\.(\d{2})$/);
+  if (bdm) {
+    const yr = parseInt(bdm[1], 10) >= 90 ? `19${bdm[1]}` : `20${bdm[1]}`;
+    bid_date = `${yr}-${bdm[2]}-${bdm[3]}`;
+  }
+
+  // 지역: siNm + guNm
+  const si = (item.siNm || '').trim();
+  const gu = (item.guNm || '').trim();
+  const region = si && gu ? `${si} ${gu}` : (si || gu || null);
+
+  // 주소: addrAll > addr > addr1+addr2
+  const addr = (item.addrAll || item.addr || ((item.addr1 || '') + ' ' + (item.addr2 || '')).trim() || '').trim() || null;
+
+  // case_no: csNo > caseNo
+  const case_no = (item.csNo || item.caseNo || item.cs_no || '').trim() || null;
+
+  // item_type: goodsNm > ctgrNm
+  const item_type = (item.goodsNm || item.ctgrNm || item.goods_nm || '').trim() || null;
+
+  // 면적: 탱크는 ㎡ 단위 → 평 변환
+  const building_area = toArea평(item.bdFrAr ?? item.buildAr ?? item.totFrAr);
+  const land_area     = toArea평(item.ldFrAr ?? item.landAr);
+
+  return {
+    case_no, item_type, region,
+    bid_date, status,
+    appraisal_price: toMan(item.apslAmt),
+    min_price:       toMan(item.minbAmt),
+    official_price:  toMan(item.offLandAmt ?? item.pubLandAmt ?? item.oflAmt),
+    winning_price:   null,
+    building_area, land_area,
+    floor:           parseFloor(addr),
+    address:         addr,
+    source:          'tankauction',
   };
 }
 
@@ -1126,7 +1213,6 @@ function parseAuctionHtml(html, site) {
       const yuchalM = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
       if (yuchalM)                           { status = `유찰${yuchalM[1]}회`; }
       else if (/유찰/.test(html))            { status = '유찰';    }
-      else if (/미진행/.test(html))          { status = '미진행';  }
       else if (/변경/.test(html))            { status = '변경';    }
       else if (/신건/.test(html))            { status = '신건';    }
       else if (/진행물건|진행중/.test(html)) { status = '진행중';  }
@@ -1263,6 +1349,150 @@ app.delete('/api/profit-analysis/:id', async (req, res) => {
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+/* ──────────────────────────────────────────
+   직접조회 경매 API
+────────────────────────────────────────── */
+
+/* GET /api/direct-auction */
+app.get('/api/direct-auction', requireAuth, async (_req, res) => {
+  try { res.json(await db.getDirectAuctions()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* GET /api/direct-auction/fetch-ctgr – 물건종류 코드 목록 */
+app.get('/api/direct-auction/fetch-ctgr', requireAuth, (_req, res) => {
+  res.json(Object.entries(_TANK_FETCH_CTGR).map(([name, code]) => ({ name, code })));
+});
+
+/* POST /api/direct-auction/fetch – 탱크옥션 직접 크롤링 (SSE) */
+app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
+  const { ctgr = '0', siCd = '0', guCd = '' } = req.body;
+  const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
+  const cfg = _REFRESH_SITE_CFG.tankauction;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (data) => {
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (typeof res.flush === 'function') res.flush();
+    }
+  };
+
+  // 탱크옥션 세션 획득
+  let tankSession = '';
+  try {
+    const r0 = await axios.get(cfg.sessionUrl, {
+      headers: { 'User-Agent': BASE_UA, 'Accept': 'text/html' },
+      timeout: 12000, maxRedirects: 5,
+    });
+    const sc = r0.headers['set-cookie'] || [];
+    const ph = sc.find(c => c.startsWith('PHPSESSID'));
+    if (ph) tankSession = ph.split(';')[0];
+    if (!tankSession) { send({ type: 'error', error: '탱크옥션 세션 획득 실패' }); res.end(); return; }
+  } catch (e) { send({ type: 'error', error: '탱크옥션 연결 실패: ' + e.message }); res.end(); return; }
+
+  const tankHeaders = {
+    'Cookie': tankSession,
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'User-Agent': BASE_UA,
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'X-Requested-With': 'XMLHttpRequest',
+    'Referer': 'https://www.tankauction.com/ca/caList.php',
+    'Origin': 'https://www.tankauction.com',
+  };
+
+  const fetchPage = async (pageNo) => {
+    const url = `https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=${pageNo}&dataSize=100&pageSize=10`;
+    const body = qs.stringify({
+      siCd: siCd || '0', guCd: guCd || '', dnCd: '', sptCd: '0',
+      addr_cs_key: '', adrPlural: '', adrPlural_cnt: '0',
+      adrsEtcSelect: '0', adrsEtc: '',
+      ctgr: ctgr || '0', sn1: '', sn2: '', pn: '', stat: '0',
+      fbCntBgn: '0', fbCntEnd: '0', bgnDt: '', endDt: '',
+      apslAmtBgn: '0', apslAmtEnd: '0', powerCtgrs: '0', chkCtgrsCd: '',
+      chkSplCdtn: '', chkPrpsCdtn: '', dataSize: '100',
+      lsType: '0', odrCol: '14', odrAds: '0', srchFR: '0', idxFR: '0', ck_photo: '0',
+    });
+    const resp = await axios.post(url, body, { headers: tankHeaders, timeout: 15000 });
+    return resp.data;
+  };
+
+  try {
+    // 1페이지 → totalCnt 확인
+    const first = await fetchPage(1);
+    const totalCnt = parseInt(first.totalCnt, 10) || 0;
+    if (!totalCnt || !Array.isArray(first.item)) {
+      send({ type: 'complete', fetched: 0, saved: 0 });
+      res.end(); return;
+    }
+
+    const pages = Math.ceil(totalCnt / 100);
+    send({ type: 'start', total: totalCnt, pages });
+
+    let allItems = [...first.item];
+
+    for (let pg = 2; pg <= pages; pg++) {
+      await new Promise(r => setTimeout(r, 300)); // 서버 부하 방지
+      const data = await fetchPage(pg);
+      if (Array.isArray(data.item)) allItems = allItems.concat(data.item);
+      send({ type: 'progress', fetched: allItems.length, total: totalCnt });
+    }
+
+    // 파싱 + upsert
+    const rows = allItems.map(parseTankAuctionFullItem).filter(r => r.case_no);
+    const result = await db.upsertDirectAuctions(rows);
+    send({ type: 'complete', fetched: allItems.length, saved: result.upserted });
+  } catch (e) {
+    send({ type: 'error', error: '크롤링 오류: ' + e.message });
+  }
+  res.end();
+});
+
+/* PUT /api/direct-auction/:id */
+app.put('/api/direct-auction/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const allowed = ['sale_market', 'jeonse_market', 'status', 'notes', 'winning_price', 'bid_date'];
+  const safe = {};
+  allowed.forEach(k => { if (k in req.body) safe[k] = req.body[k]; });
+  if (!Object.keys(safe).length) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
+  try { await db.updateDirectAuction(id, safe); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* DELETE /api/direct-auction/batch */
+app.delete('/api/direct-auction/batch', requireAuth, async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids 배열이 필요합니다.' });
+  try { await db.deleteDirectAuctionBatch(ids.map(Number)); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* DELETE /api/direct-auction/all */
+app.delete('/api/direct-auction/all', requireAuth, async (_req, res) => {
+  try { await db.deleteAllDirectAuctions(); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* DELETE /api/direct-auction/:id */
+app.delete('/api/direct-auction/:id', requireAuth, async (req, res) => {
+  try { await db.deleteDirectAuction(parseInt(req.params.id, 10)); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* POST /api/direct-auction/refresh */
+app.post('/api/direct-auction/refresh', requireAuth, (req, res) =>
+  runAuctionRefresh(req, res, {
+    getItems:     () => db.getDirectAuctions(),
+    updateItem:   (id, f) => db.updateDirectAuction(id, f),
+    bidDateField: 'bid_date',
+    statusField:  'status',
+  })
+);
 
 /* ──────────────────────────────────────────
    서버 시작 / Vercel 내보내기

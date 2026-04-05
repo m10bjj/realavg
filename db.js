@@ -441,6 +441,66 @@ async function deleteProfitAnalysis(id) {
   if (error) throw error;
 }
 
+/* ──────────────────────────────────────────
+   직접조회 경매 CRUD
+────────────────────────────────────────── */
+async function getDirectAuctions() {
+  const PAGE = 1000;
+  let all = [], from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('direct_auctions').select('*')
+      .order('bid_date', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
+async function upsertDirectAuctions(rows) {
+  if (!rows.length) return { upserted: 0 };
+  const now = new Date().toISOString();
+  const CHUNK = 400;
+  let upserted = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK).map(r => ({ ...r, updated_at: now }));
+    const { error } = await supabase
+      .from('direct_auctions')
+      .upsert(chunk, { onConflict: 'case_no,source', ignoreDuplicates: false });
+    if (error) throw error;
+    upserted += chunk.length;
+  }
+  return { upserted };
+}
+
+async function updateDirectAuction(id, fields) {
+  const { error } = await supabase
+    .from('direct_auctions')
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+async function deleteDirectAuction(id) {
+  const { error } = await supabase.from('direct_auctions').delete().eq('id', id);
+  if (error) throw error;
+}
+
+async function deleteDirectAuctionBatch(ids) {
+  const { error } = await supabase.from('direct_auctions').delete().in('id', ids);
+  if (error) throw error;
+}
+
+async function deleteAllDirectAuctions() {
+  const { error } = await supabase.from('direct_auctions').delete().neq('id', 0);
+  if (error) throw error;
+}
+
 module.exports = {
   saveSearch, saveTransactionBatch, getHistory,
   getTransactions, deleteSearch, deleteSearchBatch, deleteAllSearches,
@@ -449,4 +509,6 @@ module.exports = {
   getMyAuctions, addMyAuctions, updateMyAuction,
   deleteMyAuction, deleteMyAuctionBatch,
   getProfitAnalyses, upsertProfitAnalysis, deleteProfitAnalysis,
+  getDirectAuctions, upsertDirectAuctions, updateDirectAuction,
+  deleteDirectAuction, deleteDirectAuctionBatch, deleteAllDirectAuctions,
 };
