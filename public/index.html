@@ -1199,8 +1199,33 @@
         </label>
       </div>
 
-      <!-- 사용 방법 -->
-      <div class="refresh-steps">
+      <!-- 대장옥션 조회 방식 선택 (bossauction 선택 시에만 표시) -->
+      <div id="refresh-login-mode-row" class="refresh-site-row" style="display:none">
+        <span class="refresh-label">조회 방식</span>
+        <label class="refresh-radio">
+          <input type="radio" name="refresh-login-mode" value="nologin" checked onchange="onRefreshLoginModeChange()">
+          비로그인 <span style="color:var(--text-muted);font-size:12px">(간편)</span>
+        </label>
+        <label class="refresh-radio">
+          <input type="radio" name="refresh-login-mode" value="login" onchange="onRefreshLoginModeChange()">
+          로그인 (쿠키)
+        </label>
+      </div>
+
+      <!-- 대장옥션 비로그인 안내 -->
+      <div id="refresh-boss-nologin-notice" style="display:none;background:var(--bg-success,#f0fdf4);border:1px solid var(--success,#22c55e);border-radius:8px;padding:14px 16px;margin-bottom:8px;font-size:14px;color:var(--text-primary)">
+        ✅ 로그인 없이 자동으로 데이터를 조회합니다.<br>
+        <span style="color:var(--text-muted);font-size:13px">바로 갱신 시작 버튼을 누르세요.</span>
+      </div>
+
+      <!-- 탱크옥션 안내 (쿠키 불필요) -->
+      <div id="refresh-tank-notice" style="display:none;background:var(--bg-success,#f0fdf4);border:1px solid var(--success,#22c55e);border-radius:8px;padding:14px 16px;margin-bottom:8px;font-size:14px;color:var(--text-primary)">
+        ✅ 탱크옥션은 <strong>로그인 없이</strong> 자동으로 데이터를 조회합니다.<br>
+        <span style="color:var(--text-muted);font-size:13px">바로 갱신 시작 버튼을 누르세요.</span>
+      </div>
+
+      <!-- 사용 방법 (대장옥션 등 쿠키 필요 사이트) -->
+      <div id="refresh-cookie-section" class="refresh-steps">
         <div class="refresh-step">
           <span class="refresh-step-num">1</span>
           <div class="refresh-step-body">

@@ -3172,13 +3172,43 @@ function openRefreshModal(context) {
     info.textContent = `선택된 ${selected.size}건 갱신`;
     info.style.color = 'var(--primary)';
   }
-  const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
-  if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
+  onRefreshSiteChange();
 }
 
 function onRefreshSiteChange() {
   const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
-  if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
+  const cookieSection   = document.getElementById('refresh-cookie-section');
+  const tankNotice      = document.getElementById('refresh-tank-notice');
+  const loginModeRow    = document.getElementById('refresh-login-mode-row');
+  if (site === 'tankauction') {
+    if (loginModeRow)    loginModeRow.style.display = 'none';
+    if (cookieSection)   cookieSection.style.display = 'none';
+    if (tankNotice)      tankNotice.style.display = 'block';
+  } else if (site === 'bossauction') {
+    if (loginModeRow)    loginModeRow.style.display = '';
+    if (tankNotice)      tankNotice.style.display = 'none';
+    onRefreshLoginModeChange();
+  } else {
+    if (loginModeRow)    loginModeRow.style.display = 'none';
+    if (cookieSection)   cookieSection.style.display = '';
+    if (tankNotice)      tankNotice.style.display = 'none';
+    if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
+  }
+}
+
+function onRefreshLoginModeChange() {
+  const mode = document.querySelector('input[name="refresh-login-mode"]:checked')?.value;
+  const cookieSection = document.getElementById('refresh-cookie-section');
+  const bossNotice    = document.getElementById('refresh-boss-nologin-notice');
+  if (mode === 'nologin') {
+    if (cookieSection) cookieSection.style.display = 'none';
+    if (bossNotice)    bossNotice.style.display = 'block';
+  } else {
+    if (cookieSection) cookieSection.style.display = '';
+    if (bossNotice)    bossNotice.style.display = 'none';
+    const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
+    if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
+  }
 }
 
 function closeRefreshModal() {
@@ -3230,9 +3260,12 @@ async function startDataRefresh() {
   const progText = document.getElementById('refresh-progress-text');
   const progPct  = document.getElementById('refresh-progress-pct');
 
-  if (!site)   { showToast('사이트를 선택해주세요.', 'error'); return; }
-  if (!cookie) { showToast('쿠키 값을 입력해주세요.', 'error'); return; }
-  _savedCookies[site] = cookie;
+  const loginMode = document.querySelector('input[name="refresh-login-mode"]:checked')?.value;
+  const noLogin = (site === 'tankauction') || (site === 'bossauction' && loginMode === 'nologin');
+
+  if (!site)              { showToast('사이트를 선택해주세요.', 'error'); return; }
+  if (!cookie && !noLogin) { showToast('쿠키 값을 입력해주세요.', 'error'); return; }
+  if (cookie) _savedCookies[site] = cookie;
 
   const btn = document.getElementById('refresh-start-btn');
   btn.disabled = true;
@@ -3252,7 +3285,7 @@ async function startDataRefresh() {
     const res = await fetch(apiUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ site, cookie, ids }),
+      body:    JSON.stringify({ site, cookie, ids, noLogin }),
     });
 
     if (!res.ok) {
