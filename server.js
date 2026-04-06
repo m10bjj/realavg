@@ -1548,7 +1548,12 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
     }
 
     // 파싱 + upsert
+    if (allItems.length > 0) {
+      console.log('[DEBUG] 탱크옥션 첫 번째 item 키 목록:', Object.keys(allItems[0]));
+      console.log('[DEBUG] 첫 번째 item 샘플:', JSON.stringify(allItems[0], null, 2));
+    }
     let rows = allItems.map(parseTankAuctionFullItem).filter(r => r.case_no);
+    console.log(`[DEBUG] 전체 ${allItems.length}건 → case_no 있는 것 ${rows.length}건`);
     if (filterSingeon) rows = rows.filter(r => r.status === '신건');
     if (dong) rows = rows.filter(r => r.address && r.address.includes(dong));
     const result = await db.upsertDirectAuctions(rows);
