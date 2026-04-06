@@ -1368,7 +1368,7 @@ app.get('/api/direct-auction/fetch-ctgr', requireAuth, (_req, res) => {
 /* GET /api/direct-auction/districts?siCd=11 – 구/군 목록 조회 (탱크옥션 실시간) */
 app.get('/api/direct-auction/districts', requireAuth, async (req, res) => {
   const siCd = req.query.siCd || '0';
-  if (siCd === '0') return res.json([]);
+  if (siCd === '0') return res.json({ districts: [] });
 
   const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
   const cfg = _REFRESH_SITE_CFG.tankauction;
@@ -1411,17 +1411,20 @@ app.get('/api/direct-auction/districts', requireAuth, async (req, res) => {
       if (item.guCd && item.guNm) map.set(String(item.guCd).trim(), item.guNm.trim());
     }
     const list = [...map.entries()]
-      .map(([code, name]) => ({ code, name }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-    res.json(list);
+      .map(([guCd, guNm]) => ({ guCd, guNm }))
+      .sort((a, b) => a.guNm.localeCompare(b.guNm, 'ko'));
+    res.json({ districts: list });
   } catch (e) {
-    res.json([]); // 실패 시 빈 배열 (클라이언트는 전체만 표시)
+    res.json({ districts: [] }); // 실패 시 빈 배열 (클라이언트는 전체만 표시)
   }
 });
 
 /* POST /api/direct-auction/fetch – 탱크옥션 직접 크롤링 (SSE) */
 app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
   const { ctgr = '0', siCd = '0', guCd = '', stat = '0' } = req.body;
+  // 신건은 탱크옥션 API에서 진행중(stat=1)으로 조회 후 클라이언트 단 필터
+  const filterSingeon = stat === '신건';
+  const tankStat = filterSingeon ? '1' : stat;
   const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
   const cfg = _REFRESH_SITE_CFG.tankauction;
 
@@ -1466,7 +1469,7 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
       siCd: siCd || '0', guCd: guCd || '', dnCd: '', sptCd: '0',
       addr_cs_key: '', adrPlural: '', adrPlural_cnt: '0',
       adrsEtcSelect: '0', adrsEtc: '',
-      ctgr: ctgr || '0', sn1: '', sn2: '', pn: '', stat: stat || '0',
+      ctgr: ctgr || '0', sn1: '', sn2: '', pn: '', stat: tankStat || '0',
       fbCntBgn: '0', fbCntEnd: '0', bgnDt: '', endDt: '',
       apslAmtBgn: '0', apslAmtEnd: '0', powerCtgrs: '0', chkCtgrsCd: '',
       chkSplCdtn: '', chkPrpsCdtn: '', dataSize: '100',
@@ -1498,7 +1501,8 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
     }
 
     // 파싱 + upsert
-    const rows = allItems.map(parseTankAuctionFullItem).filter(r => r.case_no);
+    let rows = allItems.map(parseTankAuctionFullItem).filter(r => r.case_no);
+    if (filterSingeon) rows = rows.filter(r => r.status === '신건');
     const result = await db.upsertDirectAuctions(rows);
     send({ type: 'complete', fetched: allItems.length, saved: result.upserted });
   } catch (e) {
