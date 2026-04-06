@@ -886,6 +886,32 @@ const _REFRESH_SITE_CFG = {
   },
 };
 
+/* ── 탱크옥션 세션 캐시 (5분 TTL) ── */
+let _tankSessionCache = { value: '', expiresAt: 0 };
+const _TANK_BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+async function getTankSession() {
+  const now = Date.now();
+  if (_tankSessionCache.value && now < _tankSessionCache.expiresAt) {
+    return _tankSessionCache.value;
+  }
+  const cfg = _REFRESH_SITE_CFG.tankauction;
+  const r0 = await axios.get(cfg.sessionUrl, {
+    headers: {
+      'User-Agent': _TANK_BASE_UA,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+    },
+    timeout: 30000, maxRedirects: 5,
+  });
+  const sc  = r0.headers['set-cookie'] || [];
+  const ph  = sc.find(c => c.startsWith('PHPSESSID'));
+  if (!ph) throw new Error('탱크옥션 세션 획득 실패');
+  const session = ph.split(';')[0];
+  _tankSessionCache = { value: session, expiresAt: now + 5 * 60 * 1000 };
+  return session;
+}
+
 /* ── 공통 갱신 헬퍼: SSE + 병렬 5개 동시 + timeout 10s ── */
 async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField, statusField }) {
   const { site, cookie, ids, noLogin } = req.body;
@@ -922,14 +948,7 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
   let tankSession = '';
   if (site === 'tankauction') {
     try {
-      const r0 = await axios.get(cfg.sessionUrl, {
-        headers: { 'User-Agent': BASE_UA, 'Accept': 'text/html' },
-        timeout: 12000, maxRedirects: 5,
-      });
-      const sc = r0.headers['set-cookie'] || [];
-      const ph = sc.find(c => c.startsWith('PHPSESSID'));
-      if (ph) tankSession = ph.split(';')[0];
-      if (!tankSession) { send({ type: 'error', error: '탱크옥션 세션 획득 실패. 잠시 후 다시 시도해주세요.' }); res.end(); return; }
+      tankSession = await getTankSession();
     } catch(e) { send({ type: 'error', error: '탱크옥션 연결 실패: ' + e.message }); res.end(); return; }
   }
 
@@ -1370,18 +1389,8 @@ app.get('/api/direct-auction/districts', requireAuth, async (req, res) => {
   const siCd = req.query.siCd || '0';
   if (siCd === '0') return res.json({ districts: [] });
 
-  const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
-  const cfg = _REFRESH_SITE_CFG.tankauction;
   try {
-    // 세션 획득
-    const r0 = await axios.get(cfg.sessionUrl, {
-      headers: { 'User-Agent': BASE_UA, 'Accept': 'text/html' },
-      timeout: 12000, maxRedirects: 5,
-    });
-    const sc = r0.headers['set-cookie'] || [];
-    const ph = sc.find(c => c.startsWith('PHPSESSID'));
-    if (!ph) return res.json([]);
-    const tankSession = ph.split(';')[0];
+    const tankSession = await getTankSession();
 
     // 해당 시/도 1페이지 조회 → guCd, guNm 수집
     const url = `https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=1&dataSize=100&pageSize=10`;
@@ -1397,7 +1406,7 @@ app.get('/api/direct-auction/districts', requireAuth, async (req, res) => {
     const resp = await axios.post(url, body, {
       headers: {
         'Cookie': tankSession, 'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': BASE_UA, 'Accept': 'application/json, */*; q=0.01',
+        'User-Agent': _TANK_BASE_UA, 'Accept': 'application/json, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
         'Referer': 'https://www.tankauction.com/ca/caList.php',
         'Origin': 'https://www.tankauction.com',
@@ -1424,17 +1433,8 @@ app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
   const { siCd = '0', guCd = '' } = req.query;
   if (!guCd) return res.json({ dongs: [] });
 
-  const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
-  const cfg = _REFRESH_SITE_CFG.tankauction;
   try {
-    const r0 = await axios.get(cfg.sessionUrl, {
-      headers: { 'User-Agent': BASE_UA, 'Accept': 'text/html' },
-      timeout: 12000, maxRedirects: 5,
-    });
-    const sc = r0.headers['set-cookie'] || [];
-    const ph = sc.find(c => c.startsWith('PHPSESSID'));
-    if (!ph) return res.json({ dongs: [] });
-    const tankSession = ph.split(';')[0];
+    const tankSession = await getTankSession();
 
     const url = `https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=1&dataSize=100&pageSize=10`;
     const body = qs.stringify({
@@ -1449,7 +1449,7 @@ app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
     const resp = await axios.post(url, body, {
       headers: {
         'Cookie': tankSession, 'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': BASE_UA, 'Accept': 'application/json, */*; q=0.01',
+        'User-Agent': _TANK_BASE_UA, 'Accept': 'application/json, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
         'Referer': 'https://www.tankauction.com/ca/caList.php',
         'Origin': 'https://www.tankauction.com',
@@ -1476,8 +1476,6 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
   // 신건은 탱크옥션 API에서 진행중(stat=1)으로 조회 후 클라이언트 단 필터
   const filterSingeon = stat === '신건';
   const tankStat = filterSingeon ? '1' : stat;
-  const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
-  const cfg = _REFRESH_SITE_CFG.tankauction;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1494,20 +1492,13 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
   // 탱크옥션 세션 획득
   let tankSession = '';
   try {
-    const r0 = await axios.get(cfg.sessionUrl, {
-      headers: { 'User-Agent': BASE_UA, 'Accept': 'text/html' },
-      timeout: 12000, maxRedirects: 5,
-    });
-    const sc = r0.headers['set-cookie'] || [];
-    const ph = sc.find(c => c.startsWith('PHPSESSID'));
-    if (ph) tankSession = ph.split(';')[0];
-    if (!tankSession) { send({ type: 'error', error: '탱크옥션 세션 획득 실패' }); res.end(); return; }
+    tankSession = await getTankSession();
   } catch (e) { send({ type: 'error', error: '탱크옥션 연결 실패: ' + e.message }); res.end(); return; }
 
   const tankHeaders = {
     'Cookie': tankSession,
     'Content-Type': 'application/x-www-form-urlencoded',
-    'User-Agent': BASE_UA,
+    'User-Agent': _TANK_BASE_UA,
     'Accept': 'application/json, text/javascript, */*; q=0.01',
     'X-Requested-With': 'XMLHttpRequest',
     'Referer': 'https://www.tankauction.com/ca/caList.php',
