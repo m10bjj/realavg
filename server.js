@@ -1365,9 +1365,63 @@ app.get('/api/direct-auction/fetch-ctgr', requireAuth, (_req, res) => {
   res.json(Object.entries(_TANK_FETCH_CTGR).map(([name, code]) => ({ name, code })));
 });
 
+/* GET /api/direct-auction/districts?siCd=11 – 구/군 목록 조회 (탱크옥션 실시간) */
+app.get('/api/direct-auction/districts', requireAuth, async (req, res) => {
+  const siCd = req.query.siCd || '0';
+  if (siCd === '0') return res.json([]);
+
+  const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
+  const cfg = _REFRESH_SITE_CFG.tankauction;
+  try {
+    // 세션 획득
+    const r0 = await axios.get(cfg.sessionUrl, {
+      headers: { 'User-Agent': BASE_UA, 'Accept': 'text/html' },
+      timeout: 12000, maxRedirects: 5,
+    });
+    const sc = r0.headers['set-cookie'] || [];
+    const ph = sc.find(c => c.startsWith('PHPSESSID'));
+    if (!ph) return res.json([]);
+    const tankSession = ph.split(';')[0];
+
+    // 해당 시/도 1페이지 조회 → guCd, guNm 수집
+    const url = `https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=1&dataSize=100&pageSize=10`;
+    const body = qs.stringify({
+      siCd, guCd: '', dnCd: '', sptCd: '0', addr_cs_key: '', adrPlural: '',
+      adrPlural_cnt: '0', adrsEtcSelect: '0', adrsEtc: '',
+      ctgr: '0', sn1: '', sn2: '', pn: '', stat: '0',
+      fbCntBgn: '0', fbCntEnd: '0', bgnDt: '', endDt: '',
+      apslAmtBgn: '0', apslAmtEnd: '0', powerCtgrs: '0', chkCtgrsCd: '',
+      chkSplCdtn: '', chkPrpsCdtn: '', dataSize: '100',
+      lsType: '0', odrCol: '14', odrAds: '0', srchFR: '0', idxFR: '0', ck_photo: '0',
+    });
+    const resp = await axios.post(url, body, {
+      headers: {
+        'Cookie': tankSession, 'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': BASE_UA, 'Accept': 'application/json, */*; q=0.01',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://www.tankauction.com/ca/caList.php',
+        'Origin': 'https://www.tankauction.com',
+      },
+      timeout: 15000,
+    });
+
+    const items = resp.data?.item || [];
+    const map = new Map();
+    for (const item of items) {
+      if (item.guCd && item.guNm) map.set(String(item.guCd).trim(), item.guNm.trim());
+    }
+    const list = [...map.entries()]
+      .map(([code, name]) => ({ code, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    res.json(list);
+  } catch (e) {
+    res.json([]); // 실패 시 빈 배열 (클라이언트는 전체만 표시)
+  }
+});
+
 /* POST /api/direct-auction/fetch – 탱크옥션 직접 크롤링 (SSE) */
 app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
-  const { ctgr = '0', siCd = '0', guCd = '' } = req.body;
+  const { ctgr = '0', siCd = '0', guCd = '', stat = '0' } = req.body;
   const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
   const cfg = _REFRESH_SITE_CFG.tankauction;
 
@@ -1412,7 +1466,7 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
       siCd: siCd || '0', guCd: guCd || '', dnCd: '', sptCd: '0',
       addr_cs_key: '', adrPlural: '', adrPlural_cnt: '0',
       adrsEtcSelect: '0', adrsEtc: '',
-      ctgr: ctgr || '0', sn1: '', sn2: '', pn: '', stat: '0',
+      ctgr: ctgr || '0', sn1: '', sn2: '', pn: '', stat: stat || '0',
       fbCntBgn: '0', fbCntEnd: '0', bgnDt: '', endDt: '',
       apslAmtBgn: '0', apslAmtEnd: '0', powerCtgrs: '0', chkCtgrsCd: '',
       chkSplCdtn: '', chkPrpsCdtn: '', dataSize: '100',

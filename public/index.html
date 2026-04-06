@@ -470,10 +470,10 @@
             </div>
           </div>
           <div class="form-section form-section--filter">
-            <div class="form-section-header">지역</div>
+            <div class="form-section-header">시/도</div>
             <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
-                <select id="da-fetch-si">
+                <select id="da-fetch-si" onchange="loadDirectDistricts(this.value)">
                   <option value="0">전체</option>
                   <option value="11">서울</option>
                   <option value="23">인천</option>
@@ -492,6 +492,28 @@
                   <option value="26">울산</option>
                   <option value="29">세종</option>
                   <option value="39">제주</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="form-section form-section--filter">
+            <div class="form-section-header">구/군</div>
+            <div class="section-grid" style="grid-template-columns:1fr">
+              <div class="form-group">
+                <select id="da-fetch-gu">
+                  <option value="">전체</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="form-section form-section--filter">
+            <div class="form-section-header">상태</div>
+            <div class="section-grid" style="grid-template-columns:1fr">
+              <div class="form-group">
+                <select id="da-fetch-stat">
+                  <option value="0">전체</option>
+                  <option value="1">진행중</option>
+                  <option value="2">낙찰·종결</option>
                 </select>
               </div>
             </div>
