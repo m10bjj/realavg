@@ -443,18 +443,13 @@
             </svg>
             데이터 가져오기
           </span>
+          <span style="font-size:11px;font-weight:600;color:var(--primary);background:var(--primary-light,#eff6ff);padding:2px 7px;border-radius:10px">탱크옥션</span>
         </div>
         <div class="form-sections">
-          <div class="form-section form-section--filter">
-            <div class="form-section-header">사이트</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
-              <div class="form-group" style="font-size:13px;font-weight:600;color:var(--primary);padding:4px 2px">탱크옥션</div>
-            </div>
-          </div>
-          <div class="form-section form-section--filter">
-            <div class="form-section-header">물건종류</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
+          <div class="form-section form-section--region">
+            <div class="section-grid">
               <div class="form-group">
+                <label for="da-fetch-ctgr">물건종류</label>
                 <select id="da-fetch-ctgr">
                   <option value="0">전체</option>
                   <option value="201013">아파트</option>
@@ -467,12 +462,8 @@
                   <option value="101010,101011,101012,101014,101017,101037">토지</option>
                 </select>
               </div>
-            </div>
-          </div>
-          <div class="form-section form-section--filter">
-            <div class="form-section-header">시/도</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
+                <label for="da-fetch-si">시 / 도</label>
                 <select id="da-fetch-si" onchange="loadDirectDistricts(this.value)">
                   <option value="0">전체</option>
                   <option value="11">서울</option>
@@ -494,32 +485,20 @@
                   <option value="39">제주</option>
                 </select>
               </div>
-            </div>
-          </div>
-          <div class="form-section form-section--filter">
-            <div class="form-section-header">구/군</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
+                <label for="da-fetch-gu">구 / 군</label>
                 <select id="da-fetch-gu" onchange="loadDirectDongs(document.getElementById('da-fetch-si').value, this.value)">
                   <option value="">전체</option>
                 </select>
               </div>
-            </div>
-          </div>
-          <div class="form-section form-section--filter">
-            <div class="form-section-header">읍면동</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
+                <label for="da-fetch-dong">읍면동</label>
                 <select id="da-fetch-dong" disabled>
                   <option value="">전체</option>
                 </select>
               </div>
-            </div>
-          </div>
-          <div class="form-section form-section--filter">
-            <div class="form-section-header">상태</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
+                <label for="da-fetch-stat">상태</label>
                 <select id="da-fetch-stat">
                   <option value="0">전체</option>
                   <option value="신건">신건</option>
