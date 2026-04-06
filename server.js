@@ -1419,9 +1419,60 @@ app.get('/api/direct-auction/districts', requireAuth, async (req, res) => {
   }
 });
 
+/* GET /api/direct-auction/dongs?siCd=11&guCd=XX – 읍면동 목록 조회 */
+app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
+  const { siCd = '0', guCd = '' } = req.query;
+  if (!guCd) return res.json({ dongs: [] });
+
+  const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
+  const cfg = _REFRESH_SITE_CFG.tankauction;
+  try {
+    const r0 = await axios.get(cfg.sessionUrl, {
+      headers: { 'User-Agent': BASE_UA, 'Accept': 'text/html' },
+      timeout: 12000, maxRedirects: 5,
+    });
+    const sc = r0.headers['set-cookie'] || [];
+    const ph = sc.find(c => c.startsWith('PHPSESSID'));
+    if (!ph) return res.json({ dongs: [] });
+    const tankSession = ph.split(';')[0];
+
+    const url = `https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=1&dataSize=100&pageSize=10`;
+    const body = qs.stringify({
+      siCd, guCd, dnCd: '', sptCd: '0', addr_cs_key: '', adrPlural: '',
+      adrPlural_cnt: '0', adrsEtcSelect: '0', adrsEtc: '',
+      ctgr: '0', sn1: '', sn2: '', pn: '', stat: '0',
+      fbCntBgn: '0', fbCntEnd: '0', bgnDt: '', endDt: '',
+      apslAmtBgn: '0', apslAmtEnd: '0', powerCtgrs: '0', chkCtgrsCd: '',
+      chkSplCdtn: '', chkPrpsCdtn: '', dataSize: '100',
+      lsType: '0', odrCol: '14', odrAds: '0', srchFR: '0', idxFR: '0', ck_photo: '0',
+    });
+    const resp = await axios.post(url, body, {
+      headers: {
+        'Cookie': tankSession, 'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': BASE_UA, 'Accept': 'application/json, */*; q=0.01',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://www.tankauction.com/ca/caList.php',
+        'Origin': 'https://www.tankauction.com',
+      },
+      timeout: 15000,
+    });
+
+    const items = resp.data?.item || [];
+    const set = new Set();
+    for (const item of items) {
+      const nm = (item.dnNm || '').trim();
+      if (nm) set.add(nm);
+    }
+    const dongs = [...set].sort((a, b) => a.localeCompare(b, 'ko'));
+    res.json({ dongs });
+  } catch (e) {
+    res.json({ dongs: [] });
+  }
+});
+
 /* POST /api/direct-auction/fetch – 탱크옥션 직접 크롤링 (SSE) */
 app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
-  const { ctgr = '0', siCd = '0', guCd = '', stat = '0' } = req.body;
+  const { ctgr = '0', siCd = '0', guCd = '', stat = '0', dong = '' } = req.body;
   // 신건은 탱크옥션 API에서 진행중(stat=1)으로 조회 후 클라이언트 단 필터
   const filterSingeon = stat === '신건';
   const tankStat = filterSingeon ? '1' : stat;
@@ -1503,6 +1554,7 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
     // 파싱 + upsert
     let rows = allItems.map(parseTankAuctionFullItem).filter(r => r.case_no);
     if (filterSingeon) rows = rows.filter(r => r.status === '신건');
+    if (dong) rows = rows.filter(r => r.address && r.address.includes(dong));
     const result = await db.upsertDirectAuctions(rows);
     send({ type: 'complete', fetched: allItems.length, saved: result.upserted });
   } catch (e) {

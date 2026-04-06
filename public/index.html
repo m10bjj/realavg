@@ -500,7 +500,17 @@
             <div class="form-section-header">구/군</div>
             <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
-                <select id="da-fetch-gu">
+                <select id="da-fetch-gu" onchange="loadDirectDongs(document.getElementById('da-fetch-si').value, this.value)">
+                  <option value="">전체</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="form-section form-section--filter">
+            <div class="form-section-header">읍면동</div>
+            <div class="section-grid" style="grid-template-columns:1fr">
+              <div class="form-group">
+                <select id="da-fetch-dong" disabled>
                   <option value="">전체</option>
                 </select>
               </div>
