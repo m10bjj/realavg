@@ -1140,15 +1140,39 @@ function parseTankAuctionItem(item) {
   };
 }
 
-/** 탱크옥션 AuctList item → direct_auctions 전체 컬럼 파싱 */
+/** 탱크옥션 AuctList item → direct_auctions 전체 컬럼 파싱
+ *  실제 API 응답 필드: saNo, ctgr, regnAdrs, adrsInfo, areaInfo,
+ *                      apslAmt, minbAmt, sucbAmt, statNm, bidDt
+ */
 function parseTankAuctionFullItem(item) {
   const toMan = (v) => (v && typeof v === 'number') ? Math.round(v / 10000) : null;
-  const toArea평 = (v) => {
-    const f = v != null ? parseFloat(v) : null;
-    return f != null && !isNaN(f) ? Math.round(f / 3.3058 * 100) / 100 : null;
-  };
 
-  // 상태 파싱 (기존 parseTankAuctionItem과 동일)
+  // 사건번호
+  const case_no = (item.saNo || '').trim() || null;
+
+  // 물건종류
+  const item_type = (item.ctgr || '').trim() || null;
+
+  // 주소: adrsInfo > regnAdrs
+  const addr = (item.adrsInfo || item.regnAdrs || '').trim() || null;
+
+  // 지역: regnAdrs 앞 두 토큰 (시도 + 구군)
+  //  예) "서울특별시 금천구 독산동 ..." → "서울특별시 금천구"
+  const addrTokens = (item.regnAdrs || '').split(/\s+/);
+  const region = addrTokens.length >= 2
+    ? `${addrTokens[0]} ${addrTokens[1]}`
+    : (addrTokens[0] || null);
+
+  // 입찰일: "25.04.07" → "2025-04-07"
+  let bid_date = null;
+  const bd = (item.bidDt || '').trim();
+  const bdm = bd.match(/^(\d{2})\.(\d{2})\.(\d{2})$/);
+  if (bdm) {
+    const yr = parseInt(bdm[1], 10) >= 90 ? `19${bdm[1]}` : `20${bdm[1]}`;
+    bid_date = `${yr}-${bdm[2]}-${bdm[3]}`;
+  }
+
+  // 상태
   const statText = (item.statNm || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
   let status = null;
   if      (/배당종결/.test(statText)) status = '배당종결';
@@ -1168,44 +1192,28 @@ function parseTankAuctionFullItem(item) {
     else if (statText)                status = statText;
   }
 
-  // 입찰일 파싱
-  let bid_date = null;
-  const bd = (item.bidDt || '').trim();
-  const bdm = bd.match(/^(\d{2})\.(\d{2})\.(\d{2})$/);
-  if (bdm) {
-    const yr = parseInt(bdm[1], 10) >= 90 ? `19${bdm[1]}` : `20${bdm[1]}`;
-    bid_date = `${yr}-${bdm[2]}-${bdm[3]}`;
-  }
+  // 면적: areaInfo HTML 파싱
+  //  예) "<span>건물 57.03㎡(17.252평), 대지권 29.37㎡(8.884평)</span>"
+  const areaHtml = item.areaInfo || '';
+  const bm = areaHtml.match(/건물[^(]*\(([0-9.]+)평\)/);
+  const lm = areaHtml.match(/(?:대지|토지)[^(]*\(([0-9.]+)평\)/);
+  const building_area = bm ? parseFloat(bm[1]) : null;
+  const land_area     = lm ? parseFloat(lm[1]) : null;
 
-  // 지역: siNm + guNm
-  const si = (item.siNm || '').trim();
-  const gu = (item.guNm || '').trim();
-  const region = si && gu ? `${si} ${gu}` : (si || gu || null);
-
-  // 주소: addrAll > addr > addr1+addr2
-  const addr = (item.addrAll || item.addr || ((item.addr1 || '') + ' ' + (item.addr2 || '')).trim() || '').trim() || null;
-
-  // case_no: csNo > caseNo
-  const case_no = (item.csNo || item.caseNo || item.cs_no || '').trim() || null;
-
-  // item_type: goodsNm > ctgrNm
-  const item_type = (item.goodsNm || item.ctgrNm || item.goods_nm || '').trim() || null;
-
-  // 면적: 탱크는 ㎡ 단위 → 평 변환
-  const building_area = toArea평(item.bdFrAr ?? item.buildAr ?? item.totFrAr);
-  const land_area     = toArea평(item.ldFrAr ?? item.landAr);
+  // 낙찰가: sucbAmt (0이면 미낙찰)
+  const winning_price = (item.sucbAmt && item.sucbAmt > 0) ? toMan(item.sucbAmt) : null;
 
   return {
     case_no, item_type, region,
     bid_date, status,
     appraisal_price: toMan(item.apslAmt),
     min_price:       toMan(item.minbAmt),
-    official_price:  toMan(item.offLandAmt ?? item.pubLandAmt ?? item.oflAmt),
-    winning_price:   null,
+    official_price:  null,   // API 미제공
+    winning_price,
     building_area, land_area,
-    floor:           parseFloor(addr),
-    address:         addr,
-    source:          'tankauction',
+    floor:   parseFloor(addr),
+    address: addr,
+    source:  'tankauction',
   };
 }
 
@@ -1419,31 +1427,34 @@ app.get('/api/direct-auction/districts', requireAuth, async (req, res) => {
       timeout: 15000,
     });
 
+    // regnAdrs = "서울특별시 금천구 독산동 ..." → 두 번째 토큰이 구/군
     const items = resp.data?.item || [];
-    const map = new Map();
+    const set = new Set();
     for (const item of items) {
-      if (item.guCd && item.guNm) map.set(String(item.guCd).trim(), item.guNm.trim());
+      const tokens = (item.regnAdrs || '').split(/\s+/);
+      const guNm = tokens[1] || '';
+      if (guNm) set.add(guNm);
     }
-    const list = [...map.entries()]
-      .map(([guCd, guNm]) => ({ guCd, guNm }))
-      .sort((a, b) => a.guNm.localeCompare(b.guNm, 'ko'));
+    const list = [...set]
+      .sort((a, b) => a.localeCompare(b, 'ko'))
+      .map(guNm => ({ guCd: guNm, guNm }));
     res.json({ districts: list });
   } catch (e) {
-    res.json({ districts: [] }); // 실패 시 빈 배열 (클라이언트는 전체만 표시)
+    res.json({ districts: [] });
   }
 });
 
-/* GET /api/direct-auction/dongs?siCd=11&guCd=XX – 읍면동 목록 조회 */
+/* GET /api/direct-auction/dongs?siCd=11&guNm=금천구 – 읍면동 목록 조회 */
 app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
-  const { siCd = '0', guCd = '' } = req.query;
-  if (!guCd) return res.json({ dongs: [] });
+  const { siCd = '0', guNm = '' } = req.query;
+  if (!guNm) return res.json({ dongs: [] });
 
   try {
     const tankSession = await getTankSession();
 
     const url = `https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=1&dataSize=100&pageSize=10`;
     const body = qs.stringify({
-      siCd, guCd, dnCd: '', sptCd: '0', addr_cs_key: '', adrPlural: '',
+      siCd, guCd: '', dnCd: '', sptCd: '0', addr_cs_key: '', adrPlural: '',
       adrPlural_cnt: '0', adrsEtcSelect: '0', adrsEtc: '',
       ctgr: '0', sn1: '', sn2: '', pn: '', stat: '0',
       fbCntBgn: '0', fbCntEnd: '0', bgnDt: '', endDt: '',
@@ -1462,11 +1473,15 @@ app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
       timeout: 15000,
     });
 
+    // regnAdrs = "서울특별시 금천구 독산동 ..." → guNm 일치 항목의 세 번째 토큰이 동
     const items = resp.data?.item || [];
     const set = new Set();
     for (const item of items) {
-      const nm = (item.dnNm || '').trim();
-      if (nm) set.add(nm);
+      const tokens = (item.regnAdrs || '').split(/\s+/);
+      if ((tokens[1] || '') === guNm) {
+        const dnNm = tokens[2] || '';
+        if (dnNm) set.add(dnNm);
+      }
     }
     const dongs = [...set].sort((a, b) => a.localeCompare(b, 'ko'));
     res.json({ dongs });
@@ -1477,7 +1492,7 @@ app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
 
 /* POST /api/direct-auction/fetch – 탱크옥션 직접 크롤링 (SSE) */
 app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
-  const { ctgr = '0', siCd = '0', guCd = '', stat = '0', dong = '' } = req.body;
+  const { ctgr = '0', siCd = '0', guNm = '', stat = '0', dong = '' } = req.body;
   // 신건은 탱크옥션 API에서 진행중(stat=1)으로 조회 후 클라이언트 단 필터
   const filterSingeon = stat === '신건';
   const tankStat = filterSingeon ? '1' : stat;
@@ -1513,7 +1528,7 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
   const fetchPage = async (pageNo) => {
     const url = `https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=${pageNo}&dataSize=100&pageSize=10`;
     const body = qs.stringify({
-      siCd: siCd || '0', guCd: guCd || '', dnCd: '', sptCd: '0',
+      siCd: siCd || '0', guCd: '', dnCd: '', sptCd: '0',
       addr_cs_key: '', adrPlural: '', adrPlural_cnt: '0',
       adrsEtcSelect: '0', adrsEtc: '',
       ctgr: ctgr || '0', sn1: '', sn2: '', pn: '', stat: tankStat || '0',
@@ -1548,13 +1563,9 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
     }
 
     // 파싱 + upsert
-    if (allItems.length > 0) {
-      console.log('[DEBUG] 탱크옥션 첫 번째 item 키 목록:', Object.keys(allItems[0]));
-      console.log('[DEBUG] 첫 번째 item 샘플:', JSON.stringify(allItems[0], null, 2));
-    }
     let rows = allItems.map(parseTankAuctionFullItem).filter(r => r.case_no);
-    console.log(`[DEBUG] 전체 ${allItems.length}건 → case_no 있는 것 ${rows.length}건`);
     if (filterSingeon) rows = rows.filter(r => r.status === '신건');
+    if (guNm) rows = rows.filter(r => r.address && r.address.includes(guNm));
     if (dong) rows = rows.filter(r => r.address && r.address.includes(dong));
     const result = await db.upsertDirectAuctions(rows);
     send({ type: 'complete', fetched: allItems.length, saved: result.upserted });

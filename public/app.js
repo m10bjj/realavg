@@ -4325,16 +4325,16 @@ async function loadDirectDistricts(siCd) {
 }
 
 /* 구/군 변경 시 읍면동 목록 동적 로드 */
-async function loadDirectDongs(siCd, guCd) {
+async function loadDirectDongs(siCd, guNm) {
   const dongSel = document.getElementById('da-fetch-dong');
   dongSel.innerHTML = '<option value="">로딩 중…</option>';
   dongSel.disabled = true;
-  if (!guCd) {
+  if (!guNm) {
     dongSel.innerHTML = '<option value="">전체</option>';
     return;
   }
   try {
-    const res = await fetch(`/api/direct-auction/dongs?siCd=${encodeURIComponent(siCd)}&guCd=${encodeURIComponent(guCd)}`);
+    const res = await fetch(`/api/direct-auction/dongs?siCd=${encodeURIComponent(siCd)}&guNm=${encodeURIComponent(guNm)}`);
     const data = await res.json();
     dongSel.innerHTML = '<option value="">전체</option>';
     if (Array.isArray(data.dongs)) {
@@ -4356,7 +4356,7 @@ async function loadDirectDongs(siCd, guCd) {
 async function startDirectFetch() {
   const ctgr = document.getElementById('da-fetch-ctgr')?.value || '0';
   const siCd = document.getElementById('da-fetch-si')?.value  || '0';
-  const guCd = document.getElementById('da-fetch-gu')?.value  || '';
+  const guNm = document.getElementById('da-fetch-gu')?.value  || '';
   const dong = document.getElementById('da-fetch-dong')?.value || '';
   const stat = document.getElementById('da-fetch-stat')?.value || '0';
   const btn  = document.getElementById('da-fetch-btn');
@@ -4375,7 +4375,7 @@ async function startDirectFetch() {
   try {
     const res = await fetch('/api/direct-auction/fetch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ site: 'tankauction', ctgr, siCd, guCd, dong, stat }),
+      body: JSON.stringify({ site: 'tankauction', ctgr, siCd, guNm, dong, stat }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
