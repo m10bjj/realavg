@@ -2342,7 +2342,10 @@ function startEditMyCell(cell) {
   if (field === 'my_status') {
     input = document.createElement('select');
     input.className = 'my-cell-input';
-    input.innerHTML = '<option value="진행중">진행중</option><option value="낙찰">낙찰</option>';
+    input.innerHTML = [
+      '신건','진행중','유찰','변경/낙찰',
+      '낙찰','매각','취하','기각','정지','불허가','배당종결',
+    ].map(s => `<option value="${s}">${s}</option>`).join('');
     input.value = val || '진행중';
   } else if (field === 'my_bid_date') {
     input = document.createElement('input');
@@ -4353,29 +4356,40 @@ async function loadDirectDongs(siCd, guNm) {
 }
 
 /* 탱크옥션 직접 크롤링 (SSE) */
+let _directFetchController = null;
+
+function stopDirectFetch() {
+  if (_directFetchController) _directFetchController.abort();
+}
+
 async function startDirectFetch() {
   const ctgr = document.getElementById('da-fetch-ctgr')?.value || '0';
   const siCd = document.getElementById('da-fetch-si')?.value  || '0';
   const guNm = document.getElementById('da-fetch-gu')?.value  || '';
   const dong = document.getElementById('da-fetch-dong')?.value || '';
   const stat = document.getElementById('da-fetch-stat')?.value || '0';
-  const btn  = document.getElementById('da-fetch-btn');
+  const btn     = document.getElementById('da-fetch-btn');
+  const stopBtn = document.getElementById('da-stop-btn');
   const prog = document.getElementById('da-fetch-progress');
   const bar  = document.getElementById('da-fetch-bar');
   const text = document.getElementById('da-fetch-text');
   const pct  = document.getElementById('da-fetch-pct');
 
+  _directFetchController = new AbortController();
   btn.disabled = true;
-  btn.textContent = '조회 중…';
+  btn.style.display = 'none';
+  stopBtn.style.display = '';
   prog.style.display = '';
   bar.style.width = '0%';
   text.textContent = '연결 중…';
   pct.textContent  = '';
 
+  let stopped = false;
   try {
     const res = await fetch('/api/direct-auction/fetch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ site: 'tankauction', ctgr, siCd, guNm, dong, stat }),
+      signal: _directFetchController.signal,
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -4411,16 +4425,27 @@ async function startDirectFetch() {
           text.textContent = `완료: ${evt.fetched}건 수집 / ${evt.saved}건 저장`;
           showToast(`${evt.saved}건 저장 완료`, 'success');
           await loadDirectAuctions();
+        } else if (evt.type === 'stopped') {
+          stopped = true;
+          text.textContent = `정지: ${evt.saved}건 저장됨`;
+          showToast(`정지 — ${evt.saved}건 저장`, 'info');
+          await loadDirectAuctions();
         } else if (evt.type === 'error') {
           throw new Error(evt.error || '크롤링 오류');
         }
       }
     }
   } catch (e) {
-    text.textContent = '오류: ' + e.message;
-    showToast('가져오기 실패: ' + e.message, 'error');
+    if (e.name === 'AbortError') {
+      text.textContent = '정지 요청 중…';
+    } else {
+      text.textContent = '오류: ' + e.message;
+      showToast('가져오기 실패: ' + e.message, 'error');
+    }
   } finally {
+    _directFetchController = null;
     btn.disabled = false;
-    btn.textContent = '가져오기';
+    btn.style.display = '';
+    stopBtn.style.display = 'none';
   }
 }

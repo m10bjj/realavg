@@ -467,22 +467,22 @@
                 <select id="da-fetch-si" onchange="loadDirectDistricts(this.value)">
                   <option value="0">전체</option>
                   <option value="11">서울</option>
-                  <option value="23">인천</option>
-                  <option value="31">경기</option>
-                  <option value="32">강원</option>
-                  <option value="21">부산</option>
-                  <option value="38">경남</option>
-                  <option value="22">대구</option>
-                  <option value="37">경북</option>
-                  <option value="24">광주</option>
-                  <option value="36">전남</option>
-                  <option value="35">전북</option>
-                  <option value="25">대전</option>
-                  <option value="34">충남</option>
-                  <option value="33">충북</option>
-                  <option value="26">울산</option>
-                  <option value="29">세종</option>
-                  <option value="39">제주</option>
+                  <option value="28">인천</option>
+                  <option value="41">경기</option>
+                  <option value="51">강원</option>
+                  <option value="26">부산</option>
+                  <option value="48">경남</option>
+                  <option value="27">대구</option>
+                  <option value="47">경북</option>
+                  <option value="29">광주</option>
+                  <option value="46">전남</option>
+                  <option value="52">전북</option>
+                  <option value="30">대전</option>
+                  <option value="44">충남</option>
+                  <option value="43">충북</option>
+                  <option value="31">울산</option>
+                  <option value="36">세종</option>
+                  <option value="50">제주</option>
                 </select>
               </div>
               <div class="form-group">
@@ -520,13 +520,21 @@
             </div>
           </div>
 
-          <button class="btn btn-primary btn-search-submit" id="da-fetch-btn" onclick="startDirectFetch()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            가져오기
-          </button>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-primary btn-search-submit" id="da-fetch-btn" onclick="startDirectFetch()" style="flex:1">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              가져오기
+            </button>
+            <button class="btn btn-danger btn-search-submit" id="da-stop-btn" onclick="stopDirectFetch()" style="display:none;flex:1">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+              </svg>
+              정지
+            </button>
+          </div>
         </div>
 
         <!-- ② 조회조건 필터 섹션 -->

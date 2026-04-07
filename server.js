@@ -851,10 +851,10 @@ const _TANK_CTGR_MAP = {
 };
 // 탱크옥션 직접조회 시/도 코드
 const _TANK_SI_MAP = {
-  '전체': '0', '서울': '11', '부산': '21', '대구': '22', '인천': '23',
-  '광주': '24', '대전': '25', '울산': '26', '세종': '29', '경기': '31',
-  '강원': '32', '충북': '33', '충남': '34', '전북': '35', '전남': '36',
-  '경북': '37', '경남': '38', '제주': '39',
+  '전체': '0', '서울': '11', '부산': '26', '대구': '27', '인천': '28',
+  '광주': '29', '대전': '30', '울산': '31', '세종': '36', '경기': '41',
+  '강원': '51', '충북': '43', '충남': '44', '전북': '52', '전남': '46',
+  '경북': '47', '경남': '48', '제주': '50',
 };
 // 탱크옥션 직접조회 물건종류 → ctgr 코드 (전체 + 주요 분류)
 const _TANK_FETCH_CTGR = {
@@ -1134,11 +1134,22 @@ function parseTankAuctionItem(item) {
   return {
     bid_date,
     min_price:      toMan(item.minbAmt),
-    official_price: toMan(item.apslAmt),
+    official_price: null, // 탱크옥션 API는 공시가 미제공 (apslAmt는 감정가)
     winning_price:  null, // 비회원 비공개
     status,
   };
 }
+
+// 탱크옥션 ctgr 명칭 → 시스템 표준 명칭 정규화
+const _TANK_CTGR_NORMALIZE = {
+  '다세대주택':    '다세대(빌라)',
+  '연립주택':      '연립주택',
+  '오피스텔(주거)':'오피스텔',
+  '오피스텔(상업)':'오피스텔',
+  '근린생활시설':  '근린시설',
+  '승용차':        '승용자동차',
+  '지게차':        '중장비',
+};
 
 /** 탱크옥션 AuctList item → direct_auctions 전체 컬럼 파싱
  *  실제 API 응답 필드: saNo, ctgr, regnAdrs, adrsInfo, areaInfo,
@@ -1147,11 +1158,13 @@ function parseTankAuctionItem(item) {
 function parseTankAuctionFullItem(item) {
   const toMan = (v) => (v && typeof v === 'number') ? Math.round(v / 10000) : null;
 
-  // 사건번호
-  const case_no = (item.saNo || '').trim() || null;
+  // 사건번호: "2025-509489" → "2025타경509489"
+  const rawSaNo = (item.saNo || '').trim();
+  const case_no = rawSaNo ? rawSaNo.replace(/^(\d{4})-(\d+)$/, '$1타경$2') : null;
 
-  // 물건종류
-  const item_type = (item.ctgr || '').trim() || null;
+  // 물건종류: 탱크옥션 명칭 → 표준 명칭 정규화
+  const rawCtgr = (item.ctgr || '').trim();
+  const item_type = _TANK_CTGR_NORMALIZE[rawCtgr] ?? (rawCtgr || null);
 
   // 주소: adrsInfo > regnAdrs
   const addr = (item.adrsInfo || item.regnAdrs || '').trim() || null;
@@ -1228,26 +1241,29 @@ function parseAuctionHtml(html, site) {
     // 실제 가격은 "최저가&nbsp;&nbsp;131,600,000" 형태
     // 필터 SELECT의 value="5000000" 같은 값은 &nbsp; 없이 나와 구분됨
     const minM = html.match(/최저가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
-    const gamM = html.match(/감정가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
+    const gamM = html.match(/공시가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
     const wonM = html.match(/낙찰가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
 
-    // 상태 파싱: 종결 상태를 유찰 이력보다 먼저 확인 (유찰 후 취하된 물건 오분류 방지)
+    // 상태 파싱: 필터 드롭다운(취하·신건 등 포함)을 제외하고 실제 결과 영역만 검색
+    const formEnd = html.lastIndexOf('</form>');
+    const resultHtml = formEnd >= 0 ? html.slice(formEnd) : html;
+
     let status = null;
     if (wonM) {
       status = '매각';
-    } else if (/취하/.test(html))            { status = '취하';    }
-    else if (/기각/.test(html))              { status = '기각';    }
-    else if (/정지/.test(html))              { status = '정지';    }
-    else if (/불허가/.test(html))            { status = '불허가';  }
-    else if (/배당종결/.test(html))          { status = '배당종결';}
-    else if (/낙찰/.test(html))              { status = '낙찰';    }
+    } else if (/취하/.test(resultHtml))            { status = '취하';    }
+    else if (/기각/.test(resultHtml))              { status = '기각';    }
+    else if (/정지/.test(resultHtml))              { status = '정지';    }
+    else if (/불허가/.test(resultHtml))            { status = '불허가';  }
+    else if (/배당종결/.test(resultHtml))          { status = '배당종결';}
+    else if (/낙찰/.test(resultHtml))              { status = '낙찰';    }
     else {
-      const yuchalM = html.match(/유찰[\s\S]{0,30}?(\d+)회/);
-      if (yuchalM)                           { status = `유찰${yuchalM[1]}회`; }
-      else if (/유찰/.test(html))            { status = '유찰';    }
-      else if (/변경/.test(html))            { status = '변경';    }
-      else if (/신건/.test(html))            { status = '신건';    }
-      else if (/진행물건|진행중/.test(html)) { status = '진행중';  }
+      const yuchalM = resultHtml.match(/유찰[\s\S]{0,30}?(\d+)회/);
+      if (yuchalM)                                 { status = `유찰${yuchalM[1]}회`; }
+      else if (/유찰/.test(resultHtml))            { status = '유찰';    }
+      else if (/변경/.test(resultHtml))            { status = '변경';    }
+      else if (/신건/.test(resultHtml))            { status = '신건';    }
+      else if (/진행물건|진행중/.test(resultHtml)) { status = '진행중';  }
     }
 
     return {
@@ -1493,9 +1509,9 @@ app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
 /* POST /api/direct-auction/fetch – 탱크옥션 직접 크롤링 (SSE) */
 app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
   const { ctgr = '0', siCd = '0', guNm = '', stat = '0', dong = '' } = req.body;
-  // 신건은 탱크옥션 API에서 진행중(stat=1)으로 조회 후 클라이언트 단 필터
-  const filterSingeon = stat === '신건';
-  const tankStat = filterSingeon ? '1' : stat;
+  // 탱크옥션 실제 stat 코드 매핑 (신건=1110, 진행중=11, 전체=0)
+  const tankStatMap = { '신건': '1110', '1': '11' };
+  const tankStat = tankStatMap[stat] || '0';
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1531,7 +1547,7 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
       siCd: siCd || '0', guCd: '', dnCd: '', sptCd: '0',
       addr_cs_key: '', adrPlural: '', adrPlural_cnt: '0',
       adrsEtcSelect: '0', adrsEtc: '',
-      ctgr: ctgr || '0', sn1: '', sn2: '', pn: '', stat: tankStat || '0',
+      ctgr: ctgr || '0', sn1: '', sn2: '', pn: '', stat: tankStat,
       fbCntBgn: '0', fbCntEnd: '0', bgnDt: '', endDt: '',
       apslAmtBgn: '0', apslAmtEnd: '0', powerCtgrs: '0', chkCtgrsCd: '',
       chkSplCdtn: '', chkPrpsCdtn: '', dataSize: '100',
@@ -1539,6 +1555,18 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
     });
     const resp = await axios.post(url, body, { headers: tankHeaders, timeout: 15000 });
     return resp.data;
+  };
+
+  // 클라이언트 정지 감지 플래그
+  let aborted = false;
+  req.on('close', () => { aborted = true; });
+
+  const saveAndNotify = async (items, eventType) => {
+    let rows = items.map(parseTankAuctionFullItem).filter(r => r.case_no);
+    if (guNm) rows = rows.filter(r => r.address && r.address.includes(guNm));
+    if (dong) rows = rows.filter(r => r.address && r.address.includes(dong));
+    const result = await db.upsertDirectAuctions(rows);
+    send({ type: eventType, fetched: items.length, saved: result.upserted });
   };
 
   try {
@@ -1556,19 +1584,17 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
     let allItems = [...first.item];
 
     for (let pg = 2; pg <= pages; pg++) {
+      if (aborted) {
+        await saveAndNotify(allItems, 'stopped');
+        res.end(); return;
+      }
       await new Promise(r => setTimeout(r, 300)); // 서버 부하 방지
       const data = await fetchPage(pg);
       if (Array.isArray(data.item)) allItems = allItems.concat(data.item);
       send({ type: 'progress', fetched: allItems.length, total: totalCnt });
     }
 
-    // 파싱 + upsert
-    let rows = allItems.map(parseTankAuctionFullItem).filter(r => r.case_no);
-    if (filterSingeon) rows = rows.filter(r => r.status === '신건');
-    if (guNm) rows = rows.filter(r => r.address && r.address.includes(guNm));
-    if (dong) rows = rows.filter(r => r.address && r.address.includes(dong));
-    const result = await db.upsertDirectAuctions(rows);
-    send({ type: 'complete', fetched: allItems.length, saved: result.upserted });
+    await saveAndNotify(allItems, 'complete');
   } catch (e) {
     send({ type: 'error', error: '크롤링 오류: ' + e.message });
   }
