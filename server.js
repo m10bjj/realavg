@@ -1244,26 +1244,31 @@ function parseAuctionHtml(html, site) {
     const gamM = html.match(/공시가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
     const wonM = html.match(/낙찰가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
 
-    // 상태 파싱: 필터 드롭다운(취하·신건 등 포함)을 제외하고 실제 결과 영역만 검색
-    const formEnd = html.lastIndexOf('</form>');
-    const resultHtml = formEnd >= 0 ? html.slice(formEnd) : html;
+    // 상태 파싱: 결과 테이블 <tbody> 내용만 사용 (네비·필터 드롭다운 오탐 방지)
+    // 비로그인 시 "비회원의 경우 리스트 검색이 제한됩니다" → 결과 없음
+    // tbody가 여러 개(필터폼 포함)이므로 마지막 tbody(실제 결과 테이블)를 사용
+    const tbodyAll = [...html.matchAll(/<tbody>([\s\S]*?)<\/tbody>/gi)];
+    const tbodyHtml = tbodyAll.length > 0 ? tbodyAll[tbodyAll.length - 1][1] : '';
+    const noResult = /비회원|총\s*<strong>0<\/strong>/.test(html);
 
     let status = null;
-    if (wonM) {
-      status = '매각';
-    } else if (/취하/.test(resultHtml))            { status = '취하';    }
-    else if (/기각/.test(resultHtml))              { status = '기각';    }
-    else if (/정지/.test(resultHtml))              { status = '정지';    }
-    else if (/불허가/.test(resultHtml))            { status = '불허가';  }
-    else if (/배당종결/.test(resultHtml))          { status = '배당종결';}
-    else if (/낙찰/.test(resultHtml))              { status = '낙찰';    }
-    else {
-      const yuchalM = resultHtml.match(/유찰[\s\S]{0,30}?(\d+)회/);
-      if (yuchalM)                                 { status = `유찰${yuchalM[1]}회`; }
-      else if (/유찰/.test(resultHtml))            { status = '유찰';    }
-      else if (/변경/.test(resultHtml))            { status = '변경';    }
-      else if (/신건/.test(resultHtml))            { status = '신건';    }
-      else if (/진행물건|진행중/.test(resultHtml)) { status = '진행중';  }
+    if (!noResult && tbodyHtml) {
+      if (wonM) {
+        status = '매각';
+      } else if (/취하/.test(tbodyHtml))            { status = '취하';    }
+      else if (/기각/.test(tbodyHtml))              { status = '기각';    }
+      else if (/정지/.test(tbodyHtml))              { status = '정지';    }
+      else if (/불허가/.test(tbodyHtml))            { status = '불허가';  }
+      else if (/배당종결/.test(tbodyHtml))          { status = '배당종결';}
+      else if (/낙찰/.test(tbodyHtml))              { status = '낙찰';    }
+      else {
+        const yuchalM = tbodyHtml.match(/유찰[\s\S]{0,30}?(\d+)회/);
+        if (yuchalM)                                { status = `유찰${yuchalM[1]}회`; }
+        else if (/유찰/.test(tbodyHtml))            { status = '유찰';    }
+        else if (/변경/.test(tbodyHtml))            { status = '변경';    }
+        else if (/신건/.test(tbodyHtml))            { status = '신건';    }
+        else if (/진행물건|진행중/.test(tbodyHtml)) { status = '진행중';  }
+      }
     }
 
     return {
