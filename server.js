@@ -1353,7 +1353,7 @@ app.post('/api/my-auction', async (req, res) => {
 /* PATCH /api/my-auction/:id – 편집 가능 필드 수정 */
 app.patch('/api/my-auction/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const allowed = ['my_status', 'my_bid_date', 'winning_price', 'min_price', 'jeonse_market', 'sale_market', 'check_notes'];
+  const allowed = ['my_status', 'my_bid_date', 'winning_price', 'min_price', 'official_price', 'jeonse_market', 'sale_market', 'check_notes'];
   const safe = {};
   allowed.forEach(k => { if (k in req.body) safe[k] = req.body[k]; });
   if (!Object.keys(safe).length) return res.status(400).json({ error: '수정할 필드가 없습니다.' });

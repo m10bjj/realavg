@@ -2310,7 +2310,7 @@ function renderMyAuctionTable() {
       <td class="col-price my-editable" data-id="${row.id}" data-field="winning_price" data-val="${row.winning_price ?? ''}">${fmtAmt(row.winning_price)}</td>
       <td class="col-pct">${(row.winning_price && row.appraisal_price) ? (row.winning_price / row.appraisal_price * 100).toFixed(1) + '%' : '-'}</td>
       <td class="col-price my-editable" data-id="${row.id}" data-field="min_price" data-val="${row.min_price ?? ''}">${fmtAmt(row.min_price)}</td>
-      <td class="col-price">${fmtAmt(row.official_price)}</td>
+      <td class="col-price my-editable" data-id="${row.id}" data-field="official_price" data-val="${row.official_price ?? ''}">${fmtAmt(row.official_price)}</td>
       <td class="col-market my-editable" data-id="${row.id}" data-field="jeonse_market" data-val="${row.jeonse_market ?? ''}">${fmtAmt(row.jeonse_market)}</td>
       <td class="${profitCellClass(calcProfit(row.jeonse_market, row.min_price))}">${profitCellHtml(calcProfit(row.jeonse_market, row.min_price))}</td>
       <td class="col-market my-editable" data-id="${row.id}" data-field="sale_market" data-val="${row.sale_market ?? ''}">${fmtAmt(row.sale_market)}</td>
@@ -2352,7 +2352,7 @@ function startEditMyCell(cell) {
     input.type = 'date';
     input.className = 'my-cell-input';
     input.value = val || '';
-  } else if (field === 'winning_price' || field === 'min_price' || field === 'jeonse_market' || field === 'sale_market') {
+  } else if (field === 'winning_price' || field === 'min_price' || field === 'official_price' || field === 'jeonse_market' || field === 'sale_market') {
     input = document.createElement('input');
     input.type = 'number';
     input.className = 'my-cell-input';
@@ -2374,7 +2374,7 @@ function startEditMyCell(cell) {
   const save = async () => {
     const newVal = input.value.trim();
     const body = {};
-    if (field === 'winning_price' || field === 'min_price' || field === 'jeonse_market' || field === 'sale_market') {
+    if (field === 'winning_price' || field === 'min_price' || field === 'official_price' || field === 'jeonse_market' || field === 'sale_market') {
       body[field] = newVal !== '' ? parseFloat(newVal) : null;
     } else {
       body[field] = newVal !== '' ? newVal : null;
