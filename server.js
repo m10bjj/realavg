@@ -1568,7 +1568,7 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
 
   const saveAndNotify = async (items, eventType) => {
     let rows = items.map(parseTankAuctionFullItem).filter(r => r.case_no);
-    if (guNm) rows = rows.filter(r => r.address && r.address.includes(guNm));
+    if (guNm) rows = rows.filter(r => r.region && r.region.includes(guNm));
     if (dong) rows = rows.filter(r => r.address && r.address.includes(dong));
     const result = await db.upsertDirectAuctions(rows);
     send({ type: eventType, fetched: items.length, saved: result.upserted });
