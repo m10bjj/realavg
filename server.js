@@ -1050,8 +1050,8 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
         const hasData = parsed.bid_date || parsed.min_price || parsed.official_price || parsed.status;
         details.push({ case_no: auction.case_no, msg: hasData
           ? `변동 없음 (상태:${parsed.status||'-'} 입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'} 낙찰가:${parsed.winning_price||'-'})`
-          : `데이터 미확인 - 파싱결과: 상태=${parsed.status} 입찰일=${parsed.bid_date} 최저가=${parsed.min_price} 낙찰가=${parsed.winning_price}` });
-        if (!hasData) failed++; else skipped++;
+          : `조회 결과 없음` });
+        skipped++;
       } else {
         await updateItem(auction.id, changes);
         details.push({ case_no: auction.case_no, msg: `업데이트: ${Object.entries(changes).map(([k,v])=>`${k}=${v}`).join(', ')}` });
