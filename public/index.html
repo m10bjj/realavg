@@ -314,38 +314,22 @@
           </button>
         </div>
         <div class="form-sections">
-
-          <div class="form-section form-section--filter">
-            <div class="form-section-header">빠른 검색</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
+          <div class="form-section form-section--region">
+            <div class="section-grid">
               <div class="form-group">
+                <label>빠른 검색</label>
                 <input type="text" id="maf-search" placeholder="사건번호 검색" oninput="applyMyAuctionFilter()">
               </div>
-            </div>
-          </div>
-
-          <div class="form-section form-section--trade">
-            <div class="form-section-header">물건종류</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
+                <label>물건종류</label>
                 <select id="maf-item-type"><option value="">전체</option></select>
               </div>
-            </div>
-          </div>
-
-          <div class="form-section form-section--trade">
-            <div class="form-section-header">지역</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
+                <label>지역</label>
                 <select id="maf-region"><option value="">전체</option></select>
               </div>
-            </div>
-          </div>
-
-          <div class="form-section form-section--filter">
-            <div class="form-section-header">상태</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
+                <label>상태</label>
                 <select id="maf-status" onchange="toggleMyAuctionFailcountSection()">
                   <option value="">전체</option>
                   <option value="신건">신건</option>
@@ -353,65 +337,40 @@
                   <option value="유찰">유찰</option>
                 </select>
               </div>
-            </div>
-          </div>
-
-          <div id="maf-failcount-section" class="form-section form-section--filter" style="display:none">
-            <div class="form-section-header">유찰 횟수 (회)</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
-              <div class="form-group">
+              <div class="form-group" id="maf-failcount-section" style="display:none">
+                <label>유찰 횟수 (회)</label>
                 <div class="area-range-group">
                   <input type="number" id="maf-failcount-from" placeholder="최소" min="1" step="1">
                   <span class="range-sep">~</span>
                   <input type="number" id="maf-failcount-to" placeholder="최대" min="1" step="1">
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div class="form-section form-section--region">
-            <div class="form-section-header">건물평수 (평)</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
-                <div class="area-range-group">
-                  <input type="number" id="maf-area-from" placeholder="최소" min="0" step="0.1">
-                  <span class="range-sep">~</span>
-                  <input type="number" id="maf-area-to" placeholder="최대" min="0" step="0.1">
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section form-section--region">
-            <div class="form-section-header">입찰일</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
-              <div class="form-group">
+                <label>입찰일</label>
                 <div class="area-range-group">
                   <input type="date" id="maf-bid-from">
                   <span class="range-sep">~</span>
                   <input type="date" id="maf-bid-to">
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div class="form-section form-section--region" id="maf-section-min-price">
-            <div class="form-section-header">최저가 (만원)</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
               <div class="form-group">
+                <label>건물평수 (평)</label>
+                <div class="area-range-group">
+                  <input type="number" id="maf-area-from" placeholder="최소" min="0" step="0.1">
+                  <span class="range-sep">~</span>
+                  <input type="number" id="maf-area-to" placeholder="최대" min="0" step="0.1">
+                </div>
+              </div>
+              <div class="form-group" id="maf-section-min-price">
+                <label>최저가 (만원)</label>
                 <div class="area-range-group">
                   <input type="number" id="maf-min-from" placeholder="최소" min="0" step="100">
                   <span class="range-sep">~</span>
                   <input type="number" id="maf-min-to" placeholder="최대" min="0" step="100">
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div class="form-section form-section--region" id="maf-section-win-price" style="display:none">
-            <div class="form-section-header">낙찰가 (만원)</div>
-            <div class="section-grid" style="grid-template-columns:1fr">
-              <div class="form-group">
+              <div class="form-group" id="maf-section-win-price" style="display:none">
+                <label>낙찰가 (만원)</label>
                 <div class="area-range-group">
                   <input type="number" id="maf-win-from" placeholder="최소" min="0" step="100">
                   <span class="range-sep">~</span>
@@ -420,7 +379,6 @@
               </div>
             </div>
           </div>
-
           <div id="maf-result-count" style="font-size:12px;font-weight:600;color:var(--primary);padding:4px 2px;min-height:18px"></div>
           <button class="btn btn-primary btn-search-submit" onclick="applyMyAuctionFilter()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
