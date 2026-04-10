@@ -896,25 +896,36 @@ async function getTankSession() {
     return _tankSessionCache.value;
   }
   const cfg = _REFRESH_SITE_CFG.tankauction;
-  try {
-    const r0 = await axios.get(cfg.sessionUrl, {
-      headers: {
-        'User-Agent': _TANK_BASE_UA,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
-      },
-      timeout: 30000, maxRedirects: 5,
-    });
-    const sc  = r0.headers['set-cookie'] || [];
-    const ph  = sc.find(c => c.startsWith('PHPSESSID'));
-    if (!ph) throw new Error('탱크옥션 세션 획득 실패');
-    const session = ph.split(';')[0];
-    _tankSessionCache = { value: session, expiresAt: now + 5 * 60 * 1000 };
-    return session;
-  } catch (e) {
-    _tankSessionCache = { value: '', expiresAt: 0 }; // 실패 시 캐시 즉시 초기화
-    throw e;
+  const RETRYABLE = ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND'];
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const r0 = await axios.get(cfg.sessionUrl, {
+        headers: {
+          'User-Agent': _TANK_BASE_UA,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+        },
+        timeout: 20000, maxRedirects: 5,
+      });
+      const sc  = r0.headers['set-cookie'] || [];
+      const ph  = sc.find(c => c.startsWith('PHPSESSID'));
+      if (!ph) throw new Error('탱크옥션 세션 획득 실패');
+      const session = ph.split(';')[0];
+      _tankSessionCache = { value: session, expiresAt: now + 5 * 60 * 1000 };
+      return session;
+    } catch (e) {
+      lastErr = e;
+      const code = e.code || (e.cause && e.cause.code) || '';
+      if (attempt < 3 && RETRYABLE.includes(code)) {
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+        continue;
+      }
+      break;
+    }
   }
+  _tankSessionCache = { value: '', expiresAt: 0 };
+  throw lastErr;
 }
 
 /* ── 공통 갱신 헬퍼: SSE + 병렬 5개 동시 + timeout 10s ── */
