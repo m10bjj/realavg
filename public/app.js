@@ -3888,6 +3888,13 @@ let directAuctionTab      = 'active';
 const isDirectAuctionSold = r => SOLD_STATUSES.has(r.status);
 
 async function loadDirectAuctions() {
+  // 입찰일자 시작일 기본값: 오늘 기준 1주일 전 (최초 1회만)
+  const bgnEl = document.getElementById('da-fetch-bgn-dt');
+  if (bgnEl && !bgnEl.value) {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    bgnEl.value = d.toISOString().slice(0, 10);
+  }
   try {
     const data = await fetch('/api/direct-auction').then(r => r.json());
     directAuctionData = data.map((r, i) => ({ ...r, _seq: i + 1 }));
@@ -4363,11 +4370,13 @@ function stopDirectFetch() {
 }
 
 async function startDirectFetch() {
-  const ctgr = document.getElementById('da-fetch-ctgr')?.value || '0';
-  const siCd = document.getElementById('da-fetch-si')?.value  || '0';
-  const guNm = document.getElementById('da-fetch-gu')?.value  || '';
-  const dong = document.getElementById('da-fetch-dong')?.value || '';
-  const stat = document.getElementById('da-fetch-stat')?.value || '0';
+  const ctgr  = document.getElementById('da-fetch-ctgr')?.value || '0';
+  const siCd  = document.getElementById('da-fetch-si')?.value  || '0';
+  const guNm  = document.getElementById('da-fetch-gu')?.value  || '';
+  const dong  = document.getElementById('da-fetch-dong')?.value || '';
+  const stat  = document.getElementById('da-fetch-stat')?.value || '0';
+  const bgnDt = (document.getElementById('da-fetch-bgn-dt')?.value || '').replace(/-/g, '');
+  const endDt = (document.getElementById('da-fetch-end-dt')?.value || '').replace(/-/g, '');
   const btn     = document.getElementById('da-fetch-btn');
   const stopBtn = document.getElementById('da-stop-btn');
   const prog = document.getElementById('da-fetch-progress');
@@ -4388,7 +4397,7 @@ async function startDirectFetch() {
   try {
     const res = await fetch('/api/direct-auction/fetch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ site: 'tankauction', ctgr, siCd, guNm, dong, stat }),
+      body: JSON.stringify({ site: 'tankauction', ctgr, siCd, guNm, dong, stat, bgnDt, endDt }),
       signal: _directFetchController.signal,
     });
     if (!res.ok) {

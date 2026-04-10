@@ -1513,7 +1513,7 @@ app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
 
 /* POST /api/direct-auction/fetch – 탱크옥션 직접 크롤링 (SSE) */
 app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
-  const { ctgr = '0', siCd = '0', guNm = '', stat = '0', dong = '' } = req.body;
+  const { ctgr = '0', siCd = '0', guNm = '', stat = '0', dong = '', bgnDt = '', endDt = '' } = req.body;
   // 탱크옥션 실제 stat 코드 매핑 (신건=1110, 진행중=11, 전체=0)
   const tankStatMap = { '신건': '1110', '1': '11' };
   const tankStat = tankStatMap[stat] || '0';
@@ -1553,7 +1553,7 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
       addr_cs_key: '', adrPlural: '', adrPlural_cnt: '0',
       adrsEtcSelect: '0', adrsEtc: '',
       ctgr: ctgr || '0', sn1: '', sn2: '', pn: '', stat: tankStat,
-      fbCntBgn: '0', fbCntEnd: '0', bgnDt: '', endDt: '',
+      fbCntBgn: '0', fbCntEnd: '0', bgnDt: bgnDt || '', endDt: endDt || '',
       apslAmtBgn: '0', apslAmtEnd: '0', powerCtgrs: '0', chkCtgrsCd: '',
       chkSplCdtn: '', chkPrpsCdtn: '', dataSize: '100',
       lsType: '0', odrCol: '14', odrAds: '0', srchFR: '0', idxFR: '0', ck_photo: '0',
