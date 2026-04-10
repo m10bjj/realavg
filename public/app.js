@@ -344,7 +344,7 @@ async function handleSearch() {
     const res = await fetch('/api/search', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ regionCode, regionName, dealYmdStart, dealYmdEnd, tradeType }),
+      body: JSON.stringify({ regionCode, regionName, dealYmdStart, dealYmdEnd, tradeType, numOfRows: parseInt(document.getElementById('search-num-rows')?.value || '1000', 10) }),
     });
     const data = await res.json();
 

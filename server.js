@@ -212,9 +212,9 @@ function getMonthRange(start, end) {
 
 const dongCache = {};
 
-async function fetchOneMonth(endpoint, serviceKey, regionCode, dealYmd) {
+async function fetchOneMonth(endpoint, serviceKey, regionCode, dealYmd, numOfRows = 1000) {
   const response = await axios.get(endpoint, {
-    params:  { serviceKey, LAWD_CD: regionCode, DEAL_YMD: dealYmd, numOfRows: 1000, pageNo: 1 },
+    params:  { serviceKey, LAWD_CD: regionCode, DEAL_YMD: dealYmd, numOfRows, pageNo: 1 },
     headers: { 'User-Agent': 'Mozilla/5.0' },
     timeout: 30000,
   });
@@ -239,7 +239,7 @@ async function fetchOneMonth(endpoint, serviceKey, regionCode, dealYmd) {
 }
 
 app.post('/api/search', async (req, res) => {
-  const { regionCode, regionName, dealYmdStart, dealYmdEnd, tradeType } = req.body;
+  const { regionCode, regionName, dealYmdStart, dealYmdEnd, tradeType, numOfRows = 1000 } = req.body;
 
   if (!regionCode || !dealYmdStart || !dealYmdEnd || !tradeType) {
     return res.status(400).json({ error: '필수 파라미터가 누락되었습니다.' });
@@ -265,7 +265,7 @@ app.post('/api/search', async (req, res) => {
     const months     = getMonthRange(dealYmdStart, dealYmdEnd);
 
     const results = await Promise.allSettled(
-      months.map(ym => fetchOneMonth(endpoint, serviceKey, regionCode, ym))
+      months.map(ym => fetchOneMonth(endpoint, serviceKey, regionCode, ym, numOfRows))
     );
 
     const firstErr = results.find(r => r.status === 'rejected');
