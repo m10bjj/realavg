@@ -1458,45 +1458,72 @@ app.get('/api/direct-auction/districts', requireAuth, (req, res) => {
   res.json({ districts });
 });
 
-/* GET /api/direct-auction/dongs?siCd=11&guNm=금천구 – 읍면동 목록 조회 */
+/* GET /api/direct-auction/dongs?siCd=11&guNm=금천구 – 읍면동 목록 조회
+   ±90일 날짜 필터 + 최대 20페이지 병렬 순회 → 실제 경매물건 있는 읍면동만 반환 */
 app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
   const { siCd = '0', guNm = '' } = req.query;
   if (!guNm) return res.json({ dongs: [] });
 
   try {
     const tankSession = await getTankSession();
+    const tankHeaders = {
+      'Cookie': tankSession, 'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': _TANK_BASE_UA, 'Accept': 'application/json, */*; q=0.01',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': 'https://www.tankauction.com/ca/caList.php',
+      'Origin': 'https://www.tankauction.com',
+    };
 
-    const url = `https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=1&dataSize=100&pageSize=10`;
-    const body = qs.stringify({
-      siCd, guCd: '', dnCd: '', sptCd: '0', addr_cs_key: '', adrPlural: '',
-      adrPlural_cnt: '0', adrsEtcSelect: '0', adrsEtc: '',
-      ctgr: '0', sn1: '', sn2: '', pn: '', stat: '0',
-      fbCntBgn: '0', fbCntEnd: '0', bgnDt: '', endDt: '',
-      apslAmtBgn: '0', apslAmtEnd: '0', powerCtgrs: '0', chkCtgrsCd: '',
-      chkSplCdtn: '', chkPrpsCdtn: '', dataSize: '100',
-      lsType: '0', odrCol: '14', odrAds: '0', srchFR: '0', idxFR: '0', ck_photo: '0',
-    });
-    const resp = await axios.post(url, body, {
-      headers: {
-        'Cookie': tankSession, 'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': _TANK_BASE_UA, 'Accept': 'application/json, */*; q=0.01',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://www.tankauction.com/ca/caList.php',
-        'Origin': 'https://www.tankauction.com',
-      },
-      timeout: 15000,
-    });
+    // ±90일 날짜 범위로 건수 대폭 축소
+    const today = new Date();
+    const fmt = d => d.toISOString().slice(0, 10).replace(/-/g, '');
+    const bgnDt = fmt(new Date(today - 90 * 86400000));
+    const endDt = fmt(new Date(today.getTime() + 90 * 86400000));
 
-    // regnAdrs = "서울특별시 금천구 독산동 ..." → guNm 일치 항목의 세 번째 토큰이 동
-    const items = resp.data?.item || [];
+    const fetchPage = async (pageNo) => {
+      const url = `https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=${pageNo}&dataSize=100&pageSize=10`;
+      const body = qs.stringify({
+        siCd, guCd: '', dnCd: '', sptCd: '0', addr_cs_key: '', adrPlural: '',
+        adrPlural_cnt: '0', adrsEtcSelect: '0', adrsEtc: '',
+        ctgr: '0', sn1: '', sn2: '', pn: '', stat: '0',
+        fbCntBgn: '0', fbCntEnd: '0', bgnDt, endDt,
+        apslAmtBgn: '0', apslAmtEnd: '0', powerCtgrs: '0', chkCtgrsCd: '',
+        chkSplCdtn: '', chkPrpsCdtn: '', dataSize: '100',
+        lsType: '0', odrCol: '14', odrAds: '0', srchFR: '0', idxFR: '0', ck_photo: '0',
+      });
+      const resp = await axios.post(url, body, { headers: tankHeaders, timeout: 15000 });
+      return resp.data;
+    };
+
+    // 1페이지로 totalCnt 확인
+    const first = await fetchPage(1);
+    const totalCnt = parseInt(first.totalCnt, 10) || 0;
+    const totalPages = Math.ceil(totalCnt / 100);
+    const MAX_PAGES = 20; // 최대 2000건 스캔
+    const pages = Math.min(totalPages, MAX_PAGES);
+
     const set = new Set();
-    for (const item of items) {
-      const tokens = (item.regnAdrs || '').split(/\s+/);
-      if ((tokens[1] || '') === guNm) {
-        const dnNm = tokens[2] || '';
-        if (dnNm) set.add(dnNm);
+    const extractDongs = (items) => {
+      for (const item of (items || [])) {
+        const tokens = (item.regnAdrs || '').split(/\s+/);
+        if ((tokens[1] || '') === guNm) {
+          const dnNm = tokens[2] || '';
+          if (dnNm) set.add(dnNm);
+        }
       }
+    };
+
+    extractDongs(first.item);
+
+    // 2페이지~ 3개씩 병렬 배치, 배치 간 300ms 딜레이 (차단 방지 + 속도 균형)
+    const BATCH = 3;
+    for (let pg = 2; pg <= pages; pg += BATCH) {
+      await new Promise(r => setTimeout(r, 300));
+      const batchPages = Array.from({ length: Math.min(BATCH, pages - pg + 1) }, (_, i) => pg + i);
+      const results = await Promise.all(batchPages.map(p => fetchPage(p)));
+      results.forEach(d => extractDongs(d.item));
     }
+
     const dongs = [...set].sort((a, b) => a.localeCompare(b, 'ko'));
     res.json({ dongs });
   } catch (e) {
