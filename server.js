@@ -1522,6 +1522,70 @@ app.get('/api/direct-auction/dongs', requireAuth, async (req, res) => {
   }
 });
 
+/* ── 공시가 조회 헬퍼 ────────────────────────────────────────────────────
+   1) 행안부 JUSO API → bdMgtSn → PNU(19자리) 추출
+   2) 디지털트윈국토 vworld API → 공동주택공시가격(만원) 반환
+──────────────────────────────────────────────────────────────────────── */
+async function fetchOfficialPriceForAddress(address, buildingAreaPyung) {
+  if (!address || !process.env.JUSO_CONFIRM_KEY || !process.env.VWORLD_API_KEY) return null;
+
+  // 지번주소 추출: "시도 시군구 읍면동 번지" 패턴만 남기기
+  const stripped = address
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/,.*$/, '')
+    .replace(/\s+/g, ' ').trim();
+  const jibunMatch = stripped.match(/([가-힣A-Za-z]+\s+[가-힣A-Za-z]+\s+[가-힣A-Za-z]+\s+\d+(?:-\d+)?)/);
+  const cleanAddr = jibunMatch ? jibunMatch[1].trim() : null;
+  if (!cleanAddr) return null;
+
+  // ── Step 1: JUSO API → bdMgtSn → PNU(19자리) ──
+  let pnu;
+  try {
+    const jusoRes = await axios.get('https://business.juso.go.kr/addrlink/addrLinkApi.do', {
+      params: { confmKey: process.env.JUSO_CONFIRM_KEY, currentPage: 1, countPerPage: 1, keyword: cleanAddr, resultType: 'json' },
+      timeout: 10000,
+    });
+    const bdMgtSn = jusoRes.data?.results?.juso?.[0]?.bdMgtSn;
+    if (!bdMgtSn || bdMgtSn.length < 19) return null;
+    // bdMgtSn(25자리): 법정동코드(10)+산여부(1)+본번(4)+부번(4)+건물번호(6)
+    // PNU = 앞 19자리
+    pnu = bdMgtSn.substring(0, 19);
+  } catch (_) { return null; }
+
+  // ── Step 2: 디지털트윈국토 vworld 공동주택가격 API ──
+  const curYear = new Date().getFullYear();
+  const targetSqm = buildingAreaPyung ? buildingAreaPyung * 3.3058 : null;
+
+  // 전년도 → 전전년도 순으로 시도 (당해연도는 미발표 가능성)
+  for (const stdrYear of [curYear - 1, curYear - 2]) {
+    try {
+      const priceRes = await axios.get('https://api.vworld.kr/ned/data/getApartHousingPriceAttr', {
+        params: { key: process.env.VWORLD_API_KEY, domain: process.env.VWORLD_DOMAIN, pnu, stdrYear, format: 'json', numOfRows: 200, pageNo: 1 },
+        timeout: 10000,
+      });
+      const result = priceRes.data?.apartHousingPrices;
+      if (!result || result.resultCode) continue; // 오류 시 resultCode에 에러코드 문자열, 성공 시 빈 문자열
+      const items = [].concat(result.field ?? []);
+      if (!items.length) continue;
+
+      let bestPrice = null, bestDiff = Infinity;
+      for (const item of items) {
+        const pc = parseInt(String(item.pblntfPc || '0').replace(/,/g, ''), 10);
+        if (!pc) continue;
+        if (targetSqm) {
+          const diff = Math.abs(parseFloat(item.prvuseAr || 0) - targetSqm);
+          if (diff < bestDiff) { bestDiff = diff; bestPrice = Math.round(pc / 10000); }
+        } else {
+          if (!bestPrice) bestPrice = Math.round(pc / 10000);
+        }
+      }
+      if (bestPrice) return bestPrice;
+    } catch (_) { continue; }
+  }
+  return null;
+}
+
 /* POST /api/direct-auction/fetch – 탱크옥션 직접 크롤링 (SSE) */
 app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
   const { ctgr = '0', siCd = '0', guNm = '', stat = '0', dong = '', bgnDt = '', endDt = '' } = req.body;
@@ -1617,10 +1681,54 @@ app.post('/api/direct-auction/fetch', requireAuth, async (req, res) => {
   res.end();
 });
 
+/* POST /api/direct-auction/fill-official-price – 공시가 일괄 조회 (SSE) */
+app.post('/api/direct-auction/fill-official-price', requireAuth, async (req, res) => {
+  if (!process.env.JUSO_CONFIRM_KEY || !process.env.VWORLD_API_KEY) {
+    return res.status(400).json({ error: 'JUSO_CONFIRM_KEY 또는 VWORLD_API_KEY가 .env에 설정되지 않았습니다.' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (data) => {
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (typeof res.flush === 'function') res.flush();
+    }
+  };
+
+  try {
+    const allRows = await db.getDirectAuctions();
+    const targets = allRows.filter(r => r.official_price == null && r.address);
+    send({ type: 'start', total: targets.length });
+
+    if (!targets.length) { send({ type: 'complete', done: 0, failed: 0 }); res.end(); return; }
+
+    let done = 0, failed = 0;
+    for (const item of targets) {
+      let price = null;
+      try {
+        price = await fetchOfficialPriceForAddress(item.address, item.building_area);
+        if (price) await db.updateDirectAuction(item.id, { official_price: price });
+        else failed++;
+      } catch (_) { failed++; }
+      done++;
+      send({ type: 'progress', done, total: targets.length, id: item.id, price });
+      await new Promise(r => setTimeout(r, 600));
+    }
+    send({ type: 'complete', done, failed });
+  } catch (e) {
+    send({ type: 'error', error: e.message });
+  }
+  res.end();
+});
+
 /* PUT /api/direct-auction/:id */
 app.put('/api/direct-auction/:id', requireAuth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const allowed = ['sale_market', 'jeonse_market', 'status', 'notes', 'winning_price', 'bid_date'];
+  const allowed = ['sale_market', 'jeonse_market', 'status', 'notes', 'winning_price', 'bid_date', 'official_price'];
   const safe = {};
   allowed.forEach(k => { if (k in req.body) safe[k] = req.body[k]; });
   if (!Object.keys(safe).length) return res.status(400).json({ error: '수정할 필드가 없습니다.' });

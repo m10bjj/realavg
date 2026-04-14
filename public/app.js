@@ -3888,12 +3888,24 @@ let directAuctionTab      = 'active';
 const isDirectAuctionSold = r => SOLD_STATUSES.has(r.status);
 
 async function loadDirectAuctions() {
-  // 입찰일자 시작일 기본값: 오늘 기준 1주일 전 (최초 1회만)
+  // 입찰일자 시작일 기본값: 오늘 기준 3일 전 (최초 1회만)
   const bgnEl = document.getElementById('da-fetch-bgn-dt');
   if (bgnEl && !bgnEl.value) {
     const d = new Date();
-    d.setDate(d.getDate() - 7);
+    d.setDate(d.getDate() - 3);
     bgnEl.value = d.toISOString().slice(0, 10);
+  }
+  // 종료일자 변경 시 시작일을 3일 전으로 자동 세팅 (최초 1회만 이벤트 등록)
+  const endEl = document.getElementById('da-fetch-end-dt');
+  if (endEl && !endEl.dataset.autoListener) {
+    endEl.dataset.autoListener = '1';
+    endEl.addEventListener('change', () => {
+      const bgnInput = document.getElementById('da-fetch-bgn-dt');
+      if (!endEl.value || !bgnInput) return;
+      const d = new Date(endEl.value);
+      d.setDate(d.getDate() - 3);
+      bgnInput.value = d.toISOString().slice(0, 10);
+    });
   }
   try {
     const data = await fetch('/api/direct-auction').then(r => r.json());
@@ -4434,6 +4446,7 @@ async function startDirectFetch() {
           text.textContent = `완료: ${evt.fetched}건 수집 / ${evt.saved}건 저장`;
           showToast(`${evt.saved}건 저장 완료`, 'success');
           await loadDirectAuctions();
+          await startFillOfficialPrice({ bar, text, pct });
         } else if (evt.type === 'stopped') {
           stopped = true;
           text.textContent = `정지: ${evt.saved}건 저장됨`;
@@ -4456,5 +4469,72 @@ async function startDirectFetch() {
     btn.disabled = false;
     btn.style.display = '';
     stopBtn.style.display = 'none';
+  }
+}
+
+/* 공시가 일괄 자동 조회 (데이터가져오기 완료 후 자동 호출) */
+async function startFillOfficialPrice({ bar, text, pct }) {
+  text.textContent = '공시가 조회 중…';
+  bar.style.width  = '0%';
+  pct.textContent  = '';
+
+  try {
+    const res = await fetch('/api/direct-auction/fill-official-price', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      // JUSO 키 미설정 등 400 오류는 조용히 건너뜀
+      text.textContent = '공시가 조회 건너뜀: ' + (err.error || `오류 ${res.status}`);
+      return;
+    }
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+    let   total   = 0, updateCount = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+
+        if (evt.type === 'start') {
+          total = evt.total;
+          if (total === 0) { text.textContent = '공시가 조회할 항목 없음'; bar.style.width = '100%'; return; }
+          text.textContent = `공시가 조회 0/${total}…`;
+        } else if (evt.type === 'progress') {
+          const p = total > 0 ? Math.round(evt.done / total * 100) : 0;
+          bar.style.width  = p + '%';
+          pct.textContent  = p + '%';
+          text.textContent = `공시가 조회 ${evt.done}/${total}…`;
+          if (evt.price != null) {
+            [directAuctionData, directAuctionFiltered].forEach(arr => {
+              const r = arr.find(x => x.id === evt.id);
+              if (r) r.official_price = evt.price;
+            });
+            if (++updateCount % 5 === 0) renderDirectAuctionTable();
+          }
+        } else if (evt.type === 'complete') {
+          bar.style.width  = '100%';
+          pct.textContent  = '100%';
+          const success = evt.done - evt.failed;
+          text.textContent = `공시가 조회 완료: ${success}/${evt.done}건 성공`;
+          renderDirectAuctionTable();
+          showToast(`공시가 ${success}건 조회 완료`, 'success');
+        } else if (evt.type === 'error') {
+          text.textContent = '공시가 조회 오류: ' + evt.error;
+          showToast('공시가 조회 실패: ' + evt.error, 'error');
+        }
+      }
+    }
+  } catch (e) {
+    text.textContent = '공시가 조회 오류: ' + e.message;
   }
 }
