@@ -1324,6 +1324,7 @@
       <div class="admin-tabs">
         <button class="admin-tab active" onclick="switchAdminTab('account')">계정 정보</button>
         <button class="admin-tab" onclick="switchAdminTab('recovery')">복구 정보</button>
+        <button class="admin-tab" onclick="switchAdminTab('keepalive')">서버 상태</button>
       </div>
 
       <!-- 탭 1: 계정 정보 -->
@@ -1375,6 +1376,29 @@
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="closeAdminModal()">취소</button>
           <button class="btn btn-primary" onclick="handleChangeRecovery()">변경하기</button>
+        </div>
+      </div>
+
+      <!-- 탭 3: 서버 상태 -->
+      <div id="admin-tab-keepalive" style="display:none">
+        <p class="modal-desc">Vercel Cron이 매일 DB를 깨운 기록입니다. 최근 30개를 보존합니다.</p>
+        <div id="keepalive-log-wrap" style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border)">
+                <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:600">시각 (KST)</th>
+                <th style="text-align:center;padding:6px 8px;color:var(--text-muted);font-weight:600">결과</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:600">비고</th>
+              </tr>
+            </thead>
+            <tbody id="keepalive-log-body">
+              <tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeAdminModal()">닫기</button>
+          <button class="btn btn-outline btn-sm" onclick="loadKeepaliveLogs()">새로고침</button>
         </div>
       </div>
 

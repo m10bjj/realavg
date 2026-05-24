@@ -107,9 +107,20 @@ CREATE TABLE IF NOT EXISTS my_auctions (
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- keepalive 실행 로그 (최근 30개만 보존)
+CREATE TABLE IF NOT EXISTS keepalive_logs (
+  id          BIGSERIAL PRIMARY KEY,
+  executed_at TIMESTAMPTZ DEFAULT NOW(),
+  status      TEXT NOT NULL,  -- 'ok' | 'error'
+  message     TEXT            -- 에러 시 메시지
+);
+
+CREATE INDEX IF NOT EXISTS idx_keepalive_logs_executed_at ON keepalive_logs(executed_at DESC);
+
 -- RLS 비활성화 (서비스 키로 서버에서만 접근)
-ALTER TABLE auth_config  DISABLE ROW LEVEL SECURITY;
-ALTER TABLE searches     DISABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE auctions     DISABLE ROW LEVEL SECURITY;
-ALTER TABLE my_auctions  DISABLE ROW LEVEL SECURITY;
+ALTER TABLE auth_config    DISABLE ROW LEVEL SECURITY;
+ALTER TABLE searches       DISABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE auctions       DISABLE ROW LEVEL SECURITY;
+ALTER TABLE my_auctions    DISABLE ROW LEVEL SECURITY;
+ALTER TABLE keepalive_logs DISABLE ROW LEVEL SECURITY;

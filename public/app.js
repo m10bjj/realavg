@@ -1035,11 +1035,41 @@ function openAdminModal() {
 }
 
 function switchAdminTab(tab) {
-  document.getElementById('admin-tab-account').style.display  = tab === 'account'  ? '' : 'none';
-  document.getElementById('admin-tab-recovery').style.display = tab === 'recovery' ? '' : 'none';
+  document.getElementById('admin-tab-account').style.display   = tab === 'account'   ? '' : 'none';
+  document.getElementById('admin-tab-recovery').style.display  = tab === 'recovery'  ? '' : 'none';
+  document.getElementById('admin-tab-keepalive').style.display = tab === 'keepalive' ? '' : 'none';
+  const tabs = ['account', 'recovery', 'keepalive'];
   document.querySelectorAll('.admin-tab').forEach((el, i) => {
-    el.classList.toggle('active', (i === 0) === (tab === 'account'));
+    el.classList.toggle('active', tabs[i] === tab);
   });
+  if (tab === 'keepalive') loadKeepaliveLogs();
+}
+
+async function loadKeepaliveLogs() {
+  const tbody = document.getElementById('keepalive-log-body');
+  tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">불러오는 중...</td></tr>';
+  try {
+    const res = await fetch('/api/keepalive-logs');
+    if (!res.ok) throw new Error('서버 오류');
+    const logs = await res.json();
+    if (!logs.length) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">기록 없음</td></tr>';
+      return;
+    }
+    tbody.innerHTML = logs.map(log => {
+      const kst = new Date(log.executed_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      const badge = log.status === 'ok'
+        ? '<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600">정상</span>'
+        : '<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600">오류</span>';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 8px">${kst}</td>
+        <td style="text-align:center;padding:7px 8px">${badge}</td>
+        <td style="padding:7px 8px;color:var(--text-muted);font-size:12px">${log.message || '-'}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--danger)">${e.message}</td></tr>`;
+  }
 }
 function closeAdminModal() {
   document.getElementById('admin-modal').style.display = 'none';
@@ -1211,7 +1241,7 @@ function updateAuctionStatusOptions(tab) {
   if (!sel) return;
   const prev = sel.value;
   const opts = tab === 'active'
-    ? [['', '전체'], ['신건', '신건'], ['진행중', '진행중'], ['유찰', '유찰']]
+    ? [['', '전체'], ['신건', '신건'], ['진행중', '진행중'], ['변경', '변경'], ['유찰', '유찰']]
     : [['', '전체'], ['낙찰', '낙찰'], ['변경/낙찰', '변경/낙찰'], ['매각', '매각'], ['취하', '취하'], ['기각', '기각'], ['정지', '정지'], ['불허가', '불허가']];
   sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   sel.value = opts.some(([v]) => v === prev) ? prev : '';
@@ -2092,7 +2122,7 @@ function updateMyAuctionStatusOptions(tab) {
   if (sel) {
     const prev = sel.value;
     const opts = tab === 'active'
-      ? [['', '전체'], ['진행중', '진행중'], ['유찰', '유찰']]
+      ? [['', '전체'], ['진행중', '진행중'], ['변경', '변경'], ['유찰', '유찰']]
       : [['', '전체'], ['낙찰', '낙찰'], ['변경/낙찰', '변경/낙찰'], ['매각', '매각'], ['취하', '취하'], ['기각', '기각'], ['정지', '정지'], ['불허가', '불허가']];
     sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
     sel.value = opts.some(([v]) => v === prev) ? prev : '';

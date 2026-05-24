@@ -65,13 +65,50 @@ function setAuthCookie(res, userId) {
 
 // DB 활성 유지용 헬스체크 (Vercel Cron + cron-job.org)
 app.get('/api/keepalive', async (req, res) => {
+  const supabase = require('./lib/supabase');
   try {
-    const supabase = require('./lib/supabase');
     const { error } = await supabase.from('auth_config').select('id').limit(1);
     if (error) throw error;
+
+    await supabase.from('keepalive_logs').insert({ status: 'ok' });
+
+    // 최근 30개 초과분 삭제
+    const { count } = await supabase
+      .from('keepalive_logs')
+      .select('*', { count: 'exact', head: true });
+    if (count > 30) {
+      const { data: old } = await supabase
+        .from('keepalive_logs')
+        .select('id')
+        .order('executed_at', { ascending: true })
+        .limit(count - 30);
+      if (old?.length) {
+        await supabase.from('keepalive_logs').delete().in('id', old.map(r => r.id));
+      }
+    }
+
     res.json({ ok: true, timestamp: new Date().toISOString() });
   } catch (err) {
+    await supabase.from('keepalive_logs')
+      .insert({ status: 'error', message: err.message })
+      .catch(() => {});
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// keepalive 로그 조회 (관리자 전용)
+app.get('/api/keepalive-logs', requireAuth, async (_req, res) => {
+  const supabase = require('./lib/supabase');
+  try {
+    const { data, error } = await supabase
+      .from('keepalive_logs')
+      .select('id, executed_at, status, message')
+      .order('executed_at', { ascending: false })
+      .limit(30);
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
