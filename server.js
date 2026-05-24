@@ -62,6 +62,19 @@ function setAuthCookie(res, userId) {
 /* ──────────────────────────────────────────
    공개 라우트 (인증 불필요)
 ────────────────────────────────────────── */
+
+// DB 활성 유지용 헬스체크 (Vercel Cron + cron-job.org)
+app.get('/api/keepalive', async (req, res) => {
+  try {
+    const supabase = require('./lib/supabase');
+    const { error } = await supabase.from('auth_config').select('id').limit(1);
+    if (error) throw error;
+    res.json({ ok: true, timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/login', (req, res) => {
   const token = req.cookies?.token;
   if (token) {
@@ -986,6 +999,8 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
 
   async function processOne(auction) {
     if (sessionExpired) return;
+    // 탱크옥션: 요청 간 1초 딜레이 (IP 차단 방지)
+    if (site === 'tankauction') await new Promise(r => setTimeout(r, 1000));
     try {
       let parsed;
 
@@ -998,10 +1013,11 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
           send({ type: 'progress', done, total, updated, skipped, failed });
           return;
         }
-        const tankCtgr = _TANK_CTGR_MAP[(auction.item_type || '').trim()] || '0';
+        // ctgr='0'(전체): 사건번호(sn1/sn2)가 고유하므로 카테고리 필터 불필요
+        // 특정 ctgr 지정 시 DB item_type ≠ 탱크옥션 분류로 0건 반환되는 문제 방지
         const tankBody = qs.stringify({
           siCd:'0', guCd:'', dnCd:'', sptCd:'0', addr_cs_key:'', adrPlural:'',
-          adrPlural_cnt:'0', adrsEtcSelect:'0', adrsEtc:'', ctgr: tankCtgr,
+          adrPlural_cnt:'0', adrsEtcSelect:'0', adrsEtc:'', ctgr: '0',
           sn1: p.syear, sn2: p.sno, pn:'', stat:'0',
           fbCntBgn:'0', fbCntEnd:'0', bgnDt:'', endDt:'',
           apslAmtBgn:'0', apslAmtEnd:'0', powerCtgrs:'0', chkCtgrsCd:'',
@@ -1076,14 +1092,15 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
     send({ type: 'progress', done, total, updated, skipped, failed });
   }
 
-  // 5개 동시 처리 (워커 풀)
+  // 탱크옥션 2개, 나머지 5개 동시 처리 (워커 풀)
+  const concurrency = site === 'tankauction' ? 2 : 5;
   let idx = 0;
   async function worker() {
     while (idx < targets.length && !sessionExpired) {
       await processOne(targets[idx++]);
     }
   }
-  await Promise.all(Array.from({ length: Math.min(5, targets.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, worker));
 
   if (!sessionExpired) send({ type: 'complete', updated, skipped, failed, details });
   res.end();
@@ -1127,9 +1144,9 @@ function parseTankAuctionItem(item) {
     const ym = statText.match(/유찰\s*(\d+)회/);
     if (ym)                           status = `유찰${ym[1]}회`;
     else if (/유찰/.test(statText))   status = '유찰';
+    else if (/변경/.test(statText))   status = '변경';
     else if (/신건/.test(statText))   status = '신건';
     else if (/진행/.test(statText))   status = '진행중';
-    else if (/변경/.test(statText))   status = '변경';
     else if (statText)                status = statText;
   }
 
@@ -1210,9 +1227,9 @@ function parseTankAuctionFullItem(item) {
     const ym = statText.match(/유찰\s*(\d+)회/);
     if (ym)                           status = `유찰${ym[1]}회`;
     else if (/유찰/.test(statText))   status = '유찰';
+    else if (/변경/.test(statText))   status = '변경';
     else if (/신건/.test(statText))   status = '신건';
     else if (/진행/.test(statText))   status = '진행중';
-    else if (/변경/.test(statText))   status = '변경';
     else if (statText)                status = statText;
   }
 
