@@ -1117,7 +1117,7 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
         const entry = { case_no: auction.case_no, msg: hasData
           ? `변동 없음 (상태:${parsed.status||'-'} 입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'} 낙찰가:${parsed.winning_price||'-'})`
           : `조회 결과 없음` };
-        if (!hasData && rawHtml) entry.htmlSnippet = rawHtml.slice(0, 500);
+        if (!hasData && rawHtml) entry.rawHtml = rawHtml;
         details.push(entry);
         skipped++;
       } else {
@@ -1126,7 +1126,7 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
         updated++;
       }
     } catch (e) {
-      details.push({ case_no: auction.case_no, msg: `오류: ${e.message}`, htmlSnippet: rawHtml ? rawHtml.slice(0, 500) : null });
+      details.push({ case_no: auction.case_no, msg: `오류: ${e.message}`, rawHtml: rawHtml || null });
       failed++;
     }
     done++;

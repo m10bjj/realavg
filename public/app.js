@@ -3191,6 +3191,16 @@ function copyCookieSnippet() {
 }
 
 let _refreshContext = 'my-auction'; // 'my-auction' | 'auction' | 'direct-auction'
+let _lastRefreshDetails = [];
+
+function openRefreshHtml(index) {
+  const html = _lastRefreshDetails[index]?.rawHtml;
+  if (!html) return;
+  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
 
 function openRefreshModal(context) {
   _refreshContext = context || 'my-auction';
@@ -3384,7 +3394,7 @@ async function startDataRefresh() {
             ❌ 실패: ${failed}건
             ${details?.length ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px">상세 내역</summary>
               <div style="margin-top:6px;font-size:12px;max-height:260px;overflow-y:auto">
-                ${details.map(d => `<div style="margin-bottom:4px">${d.case_no}: ${d.msg}${d.htmlSnippet ? `<details style="margin-top:2px"><summary style="cursor:pointer;color:#6b7280">HTML 응답 미리보기</summary><pre style="margin:4px 0 0;padding:6px;background:#f3f4f6;border-radius:4px;font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto">${d.htmlSnippet.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre></details>` : ''}</div>`).join('')}
+                ${(_lastRefreshDetails = details, details).map((d, i) => `<div style="margin-bottom:4px">${d.case_no}: ${d.msg}${d.rawHtml ? ` <button onclick="openRefreshHtml(${i})" style="margin-left:4px;padding:1px 7px;font-size:11px;cursor:pointer;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb">HTML 새탭</button>` : ''}</div>`).join('')}
               </div></details>` : ''}
           `;
           result.style.display = '';
