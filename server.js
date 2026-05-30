@@ -1040,6 +1040,7 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
     if (site === 'tankauction') await new Promise(r => setTimeout(r, 1000));
     try {
       let parsed;
+      let rawHtml = null; // 대장옥션 응답 HTML (디버그용)
 
       if (site === 'tankauction') {
         // ── 탱크옥션: POST AuctList.php ──
@@ -1094,6 +1095,7 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
           timeout: 10000, maxRedirects: 5,
         });
         const html = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
+        rawHtml = html;
 
         if (!noLogin && (html.includes('로그인을 해주세요') || (html.includes('login.html') && !html.includes('매각기일')))) {
           sessionExpired = true;
@@ -1112,9 +1114,11 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
 
       if (Object.keys(changes).length === 0) {
         const hasData = parsed.bid_date || parsed.min_price || parsed.official_price || parsed.status;
-        details.push({ case_no: auction.case_no, msg: hasData
+        const entry = { case_no: auction.case_no, msg: hasData
           ? `변동 없음 (상태:${parsed.status||'-'} 입찰일:${parsed.bid_date||'-'} 최저가:${parsed.min_price||'-'} 낙찰가:${parsed.winning_price||'-'})`
-          : `조회 결과 없음` });
+          : `조회 결과 없음` };
+        if (!hasData && rawHtml) entry.htmlSnippet = rawHtml.slice(0, 500);
+        details.push(entry);
         skipped++;
       } else {
         await updateItem(auction.id, changes);
@@ -1122,7 +1126,7 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
         updated++;
       }
     } catch (e) {
-      details.push({ case_no: auction.case_no, msg: `오류: ${e.message}` });
+      details.push({ case_no: auction.case_no, msg: `오류: ${e.message}`, htmlSnippet: rawHtml ? rawHtml.slice(0, 500) : null });
       failed++;
     }
     done++;
