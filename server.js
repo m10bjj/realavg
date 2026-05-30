@@ -1318,7 +1318,7 @@ function parseAuctionHtml(html, site) {
 
     let status = null;
     if (!noResult && tbodyHtml) {
-      if (wonM) {
+      if (wonM || /매각(?!기일)/.test(tbodyHtml)) {
         status = '매각';
       } else if (/취하/.test(tbodyHtml))            { status = '취하';    }
       else if (/기각/.test(tbodyHtml))              { status = '기각';    }
