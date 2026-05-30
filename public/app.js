@@ -3193,10 +3193,25 @@ function copyCookieSnippet() {
 let _refreshContext = 'my-auction'; // 'my-auction' | 'auction' | 'direct-auction'
 let _lastRefreshDetails = [];
 
+function _classifyRefreshHtml(html) {
+  if (!html || html.length < 100) return '⚠️ 응답이 너무 짧음 — 빈 응답 또는 네트워크 오류';
+  if (/로그인을 해주세요|로그인이 필요|login\.html/.test(html))   return '🔒 로그인 필요 — 세션 만료 또는 쿠키 오류';
+  if (/비회원의 경우|비회원.*제한/.test(html))                    return '🚫 비회원 접근 제한 — 로그인 쿠키를 입력해야 합니다';
+  if (/총\s*<strong>0<\/strong>/.test(html))                      return '📭 검색 결과 0건 — 사건번호 불일치 또는 삭제된 사건';
+  if (/cloudflare|cf-ray/i.test(html))                            return '🛡️ Cloudflare 차단 — IP 또는 요청 빈도 차단';
+  if (/captcha|captcha|robot|access.?denied/i.test(html))         return '🤖 봇 차단 — IP 또는 요청 빈도 차단';
+  if (/403|404|500|service.?unavailable/i.test(html))             return '❌ HTTP 오류 응답 — 서버 측 에러';
+  return '❓ 원인 불명 — 파싱 실패 (HTML 구조 변경 가능성)';
+}
+
 function openRefreshHtml(index) {
-  const html = _lastRefreshDetails[index]?.rawHtml;
-  if (!html) return;
-  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+  const d = _lastRefreshDetails[index];
+  if (!d?.rawHtml) return;
+  const summary = _classifyRefreshHtml(d.rawHtml);
+  const banner = `<div style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#1e293b;color:#f8fafc;padding:10px 16px;font-family:sans-serif;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.4)">[${d.case_no}] ${summary}</div><div style="height:46px"></div>`;
+  const modified = d.rawHtml.replace(/(<body[^>]*>)/i, `$1${banner}`);
+  const out = modified.includes(banner) ? modified : banner + d.rawHtml;
+  const blob = new Blob([out], { type: 'text/html; charset=utf-8' });
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
   setTimeout(() => URL.revokeObjectURL(url), 10000);
