@@ -1301,19 +1301,23 @@ function parseAuctionHtml(html, site) {
 
   // ── 대장옥션 파싱 ──
   if (site === 'bossauction') {
-    // 매각기일: "2026-04-14<br/>(10:00)" 또는 "2026-04-14 (10:00)" 형태
-    const dateM = html.match(/(\d{4}-\d{2}-\d{2})(?:<br\s*\/?>|\s)*\([\d:]+\)/);
+    // 상태·날짜 파싱: 결과 테이블 <tbody> 내용만 사용 (네비·필터 드롭다운 오탐 방지)
+    // 비로그인 시 "비회원의 경우 리스트 검색이 제한됩니다" → 결과 없음
+    // tbody가 여러 개(필터폼 포함)이므로 마지막 tbody(실제 결과 테이블)를 사용
+    const tbodyAll = [...html.matchAll(/<tbody>([\s\S]*?)<\/tbody>/gi)];
+    const tbodyHtml = tbodyAll.length > 0 ? tbodyAll[tbodyAll.length - 1][1] : '';
+
+    // 매각기일: tbody 내에서 마지막 날짜 사용 (기일변경 시 이전 날짜 오탐 방지)
+    // "2026-04-14<br/>(10:00)" 또는 "2026-04-14 (10:00)" 형태
+    const dateRe = /(\d{4}-\d{2}-\d{2})(?:<br\s*\/?>|\s)*\([\d:]+\)/g;
+    const dateMatches = [...(tbodyHtml || html).matchAll(dateRe)];
+    const dateM = dateMatches.length ? dateMatches[dateMatches.length - 1] : null;
+
     // 실제 가격은 "최저가&nbsp;&nbsp;131,600,000" 형태
     // 필터 SELECT의 value="5000000" 같은 값은 &nbsp; 없이 나와 구분됨
     const minM = html.match(/최저가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
     const gamM = html.match(/공시가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
     const wonM = html.match(/낙찰가(?:&nbsp;|[\u00A0\s])+(\d{1,3}(?:,\d{3})+)/);
-
-    // 상태 파싱: 결과 테이블 <tbody> 내용만 사용 (네비·필터 드롭다운 오탐 방지)
-    // 비로그인 시 "비회원의 경우 리스트 검색이 제한됩니다" → 결과 없음
-    // tbody가 여러 개(필터폼 포함)이므로 마지막 tbody(실제 결과 테이블)를 사용
-    const tbodyAll = [...html.matchAll(/<tbody>([\s\S]*?)<\/tbody>/gi)];
-    const tbodyHtml = tbodyAll.length > 0 ? tbodyAll[tbodyAll.length - 1][1] : '';
     const noResult = /비회원|총\s*<strong>0<\/strong>/.test(html);
 
     let status = null;
