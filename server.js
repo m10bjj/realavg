@@ -919,6 +919,45 @@ const _TANK_FETCH_CTGR = {
   '토지':     '101010,101011,101012,101014,101017,101037',
 };
 
+/* ── 크롤링 차단 방지: UA 풀 · 랜덤 딜레이 · 브라우저 헤더 ── */
+const _UA_POOL = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+];
+function _randomUA() {
+  return _UA_POOL[Math.floor(Math.random() * _UA_POOL.length)];
+}
+function _randomDelay(minMs, maxMs) {
+  const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+  return new Promise(r => setTimeout(r, ms));
+}
+function _buildBrowserHeaders(ua, referer, cookieHeader) {
+  const ver = (ua.match(/Chrome\/(\d+)/) || [])[1] || '130';
+  const isMac = ua.includes('Macintosh');
+  return {
+    'User-Agent': ua,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Cache-Control': 'max-age=0',
+    'Upgrade-Insecure-Requests': '1',
+    'sec-ch-ua': `"Google Chrome";v="${ver}", "Chromium";v="${ver}", "Not_A Brand";v="24"`,
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': isMac ? '"macOS"' : '"Windows"',
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'same-origin',
+    'sec-fetch-user': '?1',
+    ...(referer     ? { 'Referer': referer }   : {}),
+    ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
+  };
+}
+
 const _REFRESH_SITE_CFG = {
   bossauction: {
     host: 'https://www.bossauction.co.kr',
@@ -1000,15 +1039,7 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
     }
   };
 
-  const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0';
   const cookieHeader = cookie ? (cookie.includes('=') ? cookie : `PHPSESSID=${cookie}`) : '';
-  const headers = {
-    'Cookie': cookieHeader,
-    'User-Agent': BASE_UA,
-    'Referer': cfg.host,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'ko-KR,ko;q=0.9',
-  };
 
   // ── 탱크옥션 전용: PHPSESSID 자동 획득 ──
   let tankSession = '';
@@ -1036,8 +1067,9 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
 
   async function processOne(auction) {
     if (sessionExpired) return;
-    // 탱크옥션: 요청 간 1초 딜레이 (IP 차단 방지)
-    if (site === 'tankauction') await new Promise(r => setTimeout(r, 1000));
+    // 요청 간 랜덤 딜레이 (IP 차단·봇 감지 방지)
+    if (site === 'tankauction') await _randomDelay(2000, 5000);
+    else                        await _randomDelay(3000, 8000);
     try {
       let parsed;
       let rawHtml = null; // 대장옥션 응답 HTML (디버그용)
@@ -1065,7 +1097,7 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
         const tankHeaders = {
           'Cookie': tankSession,
           'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': BASE_UA,
+          'User-Agent': _randomUA(),
           'Accept': 'application/json, text/javascript, */*; q=0.01',
           'X-Requested-With': 'XMLHttpRequest',
           'Referer': 'https://www.tankauction.com/ca/caList.php',
@@ -1090,8 +1122,9 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
           send({ type: 'progress', done, total, updated, skipped, failed });
           return;
         }
+        const ua = _randomUA();
         const resp = await axios.get(url, {
-          headers: noLogin ? { 'User-Agent': BASE_UA, 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'Accept-Language': 'ko-KR,ko;q=0.9' } : headers,
+          headers: _buildBrowserHeaders(ua, cfg.host, noLogin ? '' : cookieHeader),
           timeout: 10000, maxRedirects: 5,
         });
         const html = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
@@ -1133,8 +1166,8 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
     send({ type: 'progress', done, total, updated, skipped, failed });
   }
 
-  // 탱크옥션 2개, 나머지 5개 동시 처리 (워커 풀)
-  const concurrency = site === 'tankauction' ? 2 : 5;
+  // 순차 처리 (차단 방지: 랜덤 딜레이와 함께 1개씩)
+  const concurrency = 1;
   let idx = 0;
   async function worker() {
     while (idx < targets.length && !sessionExpired) {
