@@ -1075,7 +1075,7 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
       let rawHtml = null; // 대장옥션 응답 HTML (디버그용)
 
       if (site === 'tankauction') {
-        // ── 탱크옥션: POST AuctList.php ──
+        // ── 탱크옥션: POST caList.php + srchRegNo → HTML 파싱 ──
         const p = _parseCaseNo(auction.case_no);
         if (!p) {
           details.push({ case_no: auction.case_no, msg: '사건번호 형식 오류' });
@@ -1083,35 +1083,28 @@ async function runAuctionRefresh(req, res, { getItems, updateItem, bidDateField,
           send({ type: 'progress', done, total, updated, skipped, failed });
           return;
         }
-        // ctgr='0'(전체): 사건번호(sn1/sn2)가 고유하므로 카테고리 필터 불필요
-        // 특정 ctgr 지정 시 DB item_type ≠ 탱크옥션 분류로 0건 반환되는 문제 방지
-        const tankBody = qs.stringify({
-          siCd:'0', guCd:'', dnCd:'', sptCd:'0', addr_cs_key:'', adrPlural:'',
-          adrPlural_cnt:'0', adrsEtcSelect:'0', adrsEtc:'', ctgr: '0',
-          sn1: p.syear, sn2: p.sno, pn:'', stat:'0',
-          fbCntBgn:'0', fbCntEnd:'0', bgnDt:'', endDt:'',
-          apslAmtBgn:'0', apslAmtEnd:'0', powerCtgrs:'0', chkCtgrsCd:'',
-          chkSplCdtn:'', chkPrpsCdtn:'', dataSize:'20',
-          lsType:'0', odrCol:'14', odrAds:'0', srchFR:'0', idxFR:'0', ck_photo:'0',
-        });
-        const tankHeaders = {
-          'Cookie': tankSession,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': _randomUA(),
-          'Accept': 'application/json, text/javascript, */*; q=0.01',
-          'X-Requested-With': 'XMLHttpRequest',
-          'Referer': 'https://www.tankauction.com/ca/caList.php',
-          'Origin': 'https://www.tankauction.com',
-        };
-        const resp = await axios.post(cfg.auctListUrl, tankBody, { headers: tankHeaders, timeout: 10000 });
-        const data = resp.data;
-        if (!data || !Array.isArray(data.item) || data.item.length === 0) {
-          details.push({ case_no: auction.case_no, msg: `데이터 없음 (totalCnt=${data && data.totalCnt != null ? data.totalCnt : '?'})` });
-          skipped++; done++;
-          send({ type: 'progress', done, total, updated, skipped, failed });
-          return;
-        }
-        parsed = parseTankAuctionItem(data.item[0]);
+        const regNo = `${p.syear}-${p.sno}`;
+        const tankBody = qs.stringify({ srchRegNo: regNo });
+        const ua = _randomUA();
+        const resp = await axios.post(
+          'https://www.tankauction.com/ca/caList.php',
+          tankBody,
+          {
+            headers: {
+              'Cookie': tankSession,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent': ua,
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'ko-KR,ko;q=0.9',
+              'Referer': 'https://www.tankauction.com/ca/caList.php',
+              'Origin': 'https://www.tankauction.com',
+            },
+            timeout: 15000,
+            maxRedirects: 5,
+          }
+        );
+        rawHtml = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
+        parsed = parseAuctionHtml(rawHtml, 'tankauction');
 
       } else {
         // ── 대장옥션 등: GET searchUrl ──
