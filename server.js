@@ -973,6 +973,14 @@ const _REFRESH_SITE_CFG = {
     auctListUrl: 'https://www.tankauction.com/ca/AuctList.php?srchCase=srchAll&pageNo=1&dataSize=20&pageSize=10',
     sessionUrl:  'https://www.tankauction.com/ca/caList.php',
   },
+  hauction: {
+    host: 'https://www.hauction.co.kr',
+    // GET 방식: SSR HTML에 JSON 데이터 포함 (로그인 불필요)
+    searchUrl: (caseNo) => {
+      const p = _parseCaseNo(caseNo); if (!p) return null;
+      return `https://www.hauction.co.kr/search/auction?unique_year=${p.syear}&unique_number=${p.sno}&status=%EC%A0%84%EC%B2%B4%EB%B3%B4%EA%B8%B0&t=${Date.now()}`;
+    },
+  },
 };
 
 /* ── 탱크옥션 세션 캐시 (5분 TTL) ── */
@@ -1328,6 +1336,23 @@ function parseTankAuctionFullItem(item) {
 /** HTML에서 입찰일·최저가·공시가 파싱 */
 function parseAuctionHtml(html, site) {
   const toMan = (str) => str ? Math.round(parseInt(str.replace(/,/g, ''), 10) / 10000) : null;
+
+  // ── 행크옥션 파싱 ──
+  // SSR HTML에 Next.js가 \"key\":\"value\" 형태로 JSON을 이스케이프해서 포함
+  if (site === 'hauction') {
+    const toMan = (v) => (v && v > 0) ? Math.round(v / 10000) : null;
+    const statusM = html.match(/\\"status\\":\\"([^\\"]+)\\"/);
+    const dateM   = html.match(/\\"bidDttm\\":\\"(\d{4}-\d{2}-\d{2})T/);
+    const minM    = html.match(/\\"minbAmount\\":(\d+)/);
+    const wonM    = html.match(/\\"sucbAmount\\":(\d+)/);
+    return {
+      status:         statusM ? statusM[1] : null,
+      bid_date:       dateM   ? dateM[1]   : null,
+      min_price:      minM    ? toMan(parseInt(minM[1], 10))  : null,
+      winning_price:  wonM    ? toMan(parseInt(wonM[1], 10))  : null,
+      official_price: null,
+    };
+  }
 
   // ── 대장옥션 파싱 ──
   if (site === 'bossauction') {

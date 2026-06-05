@@ -3245,19 +3245,25 @@ function onRefreshSiteChange() {
   const site = document.querySelector('input[name="refresh-site"]:checked')?.value;
   const cookieSection   = document.getElementById('refresh-cookie-section');
   const tankNotice      = document.getElementById('refresh-tank-notice');
+  const haucNotice      = document.getElementById('refresh-hauc-notice');
   const loginModeRow    = document.getElementById('refresh-login-mode-row');
+  // 모든 안내 숨기기
+  if (tankNotice)  tankNotice.style.display  = 'none';
+  if (haucNotice)  haucNotice.style.display  = 'none';
   if (site === 'tankauction') {
-    if (loginModeRow)    loginModeRow.style.display = 'none';
-    if (cookieSection)   cookieSection.style.display = 'none';
-    if (tankNotice)      tankNotice.style.display = 'block';
+    if (loginModeRow)  loginModeRow.style.display = 'none';
+    if (cookieSection) cookieSection.style.display = 'none';
+    if (tankNotice)    tankNotice.style.display = 'block';
+  } else if (site === 'hauction') {
+    if (loginModeRow)  loginModeRow.style.display = 'none';
+    if (cookieSection) cookieSection.style.display = 'none';
+    if (haucNotice)    haucNotice.style.display = 'block';
   } else if (site === 'bossauction') {
-    if (loginModeRow)    loginModeRow.style.display = '';
-    if (tankNotice)      tankNotice.style.display = 'none';
+    if (loginModeRow)  loginModeRow.style.display = '';
     onRefreshLoginModeChange();
   } else {
-    if (loginModeRow)    loginModeRow.style.display = 'none';
-    if (cookieSection)   cookieSection.style.display = '';
-    if (tankNotice)      tankNotice.style.display = 'none';
+    if (loginModeRow)  loginModeRow.style.display = 'none';
+    if (cookieSection) cookieSection.style.display = '';
     if (site) document.getElementById('refresh-cookie-input').value = _savedCookies[site] || '';
   }
 }
@@ -3327,7 +3333,7 @@ async function startDataRefresh() {
   const progPct  = document.getElementById('refresh-progress-pct');
 
   const loginMode = document.querySelector('input[name="refresh-login-mode"]:checked')?.value;
-  const noLogin = (site === 'tankauction') || (site === 'bossauction' && loginMode === 'nologin');
+  const noLogin = (site === 'tankauction') || (site === 'hauction') || (site === 'bossauction' && loginMode === 'nologin');
 
   if (!site)              { showToast('사이트를 선택해주세요.', 'error'); return; }
   if (!cookie && !noLogin) { showToast('쿠키 값을 입력해주세요.', 'error'); return; }
