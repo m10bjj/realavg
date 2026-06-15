@@ -2358,13 +2358,13 @@ function renderMyAuctionTable() {
       <td class="col-pct">${(row.winning_price && row.appraisal_price) ? (row.winning_price / row.appraisal_price * 100).toFixed(1) + '%' : '-'}</td>
       <td class="col-price my-editable" data-id="${row.id}" data-field="min_price" data-val="${row.min_price ?? ''}">${fmtAmt(row.min_price)}</td>
       <td class="col-price my-editable" data-id="${row.id}" data-field="official_price" data-val="${row.official_price ?? ''}">${fmtAmt(row.official_price)}</td>
+      <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="${naverLandUrl(row.address, row.item_type)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산 검색">N</a> ` : ''}${esc(row.address)}</td>
+      <td class="col-floor">${row.floor != null ? row.floor + '층' : '-'}</td>
+      <td class="col-area">${row.building_area != null ? row.building_area : '-'}</td>
       <td class="col-market my-editable" data-id="${row.id}" data-field="jeonse_market" data-val="${row.jeonse_market ?? ''}">${fmtAmt(row.jeonse_market)}</td>
       <td class="${profitCellClass(calcProfit(row.jeonse_market, row.min_price))}">${profitCellHtml(calcProfit(row.jeonse_market, row.min_price))}</td>
       <td class="col-market my-editable" data-id="${row.id}" data-field="sale_market" data-val="${row.sale_market ?? ''}">${fmtAmt(row.sale_market)}</td>
       <td class="${profitCellClass(calcProfit(row.sale_market, row.min_price))}">${profitCellHtml(calcProfit(row.sale_market, row.min_price))}</td>
-      <td class="col-floor">${row.floor != null ? row.floor + '층' : '-'}</td>
-      <td class="col-area">${row.building_area != null ? row.building_area : '-'}</td>
-      <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="${naverLandUrl(row.address, row.item_type)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산 검색">N</a> ` : ''}${esc(row.address)}</td>
       <td class="col-notes my-editable" data-id="${row.id}" data-field="check_notes" data-val="${esc(row.check_notes || '')}" title="${esc(row.check_notes)}">${esc(row.check_notes) || '-'}</td>
       <td class="col-date">${savedDate}</td>
       <td class="col-del"><button class="btn-row-del" onclick="deleteOneMyAuction(${row.id})" title="삭제">✕</button></td>
