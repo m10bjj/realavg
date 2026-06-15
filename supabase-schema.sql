@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS auctions (
   floor           INTEGER,            -- 층수 (주소에서 자동 파싱)
   address         TEXT,               -- 주소
   notes           TEXT,               -- 체크사항
+  is_important    BOOLEAN DEFAULT FALSE,  -- 중요한건 표시
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -103,6 +104,7 @@ CREATE TABLE IF NOT EXISTS my_auctions (
   my_status       TEXT DEFAULT '진행중',  -- 진행중 / 낙찰
   my_bid_date     DATE,                   -- 입찰일 (사용자 수정 가능)
   check_notes     TEXT,                   -- 체크사항 (사용자 수정 가능)
+  is_important    BOOLEAN DEFAULT FALSE,  -- 중요한건 표시
   saved_at        TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );

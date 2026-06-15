@@ -1536,13 +1536,13 @@ function renderAuctionTable() {
   if (saveMyBtn) saveMyBtn.style.display = auctionSelected.size > 0 ? '' : 'none';
 
   if (!auctionData.length) {
-    tbody.innerHTML = '<tr><td colspan="21" class="auction-empty">데이터가 없습니다. 엑셀 파일을 업로드하세요.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="22" class="auction-empty">데이터가 없습니다. 엑셀 파일을 업로드하세요.</td></tr>';
     document.getElementById('auction-pagination').innerHTML = '';
     document.getElementById('auction-page-info').textContent = '';
     return;
   }
   if (!auctionFiltered.length) {
-    tbody.innerHTML = '<tr><td colspan="21" class="auction-empty">조건에 맞는 데이터가 없습니다.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="22" class="auction-empty">조건에 맞는 데이터가 없습니다.</td></tr>';
     document.getElementById('auction-pagination').innerHTML = '';
     document.getElementById('auction-page-info').textContent = '';
     return;
@@ -1573,6 +1573,7 @@ function renderAuctionTable() {
     const sc        = statusClass(row.status);
     return `<tr data-id="${row.id}" class="${auctionSelected.has(row.id) ? 'row-selected' : ''}">
       <td class="col-chk"><input type="checkbox" ${auctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleAuctionRow(${row.id}, this.checked)"></td>
+      <td class="col-important"><button class="btn-important ${row.is_important ? 'is-active' : ''}" onclick="toggleAuctionImportant(${row.id})" title="중요한건 표시">★</button></td>
       <td class="col-seq">${row._seq ?? '-'}</td>
       <td class="col-case">${esc(row.case_no)}</td>
       <td class="col-type">${esc(row.item_type)}</td>
@@ -1604,6 +1605,21 @@ function renderAuctionTable() {
   };
 
   renderAuctionPagination(totalPages);
+}
+
+/* 안전한물건 중요한건 토글 */
+async function toggleAuctionImportant(id) {
+  const row = auctionData.find(r => r.id === id);
+  if (!row) return;
+  const newVal = !row.is_important;
+  try {
+    await fetch(`/api/auction/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_important: newVal })
+    });
+    row.is_important = newVal;
+    renderAuctionTable();
+  } catch (e) { console.error('중요 표시 변경 실패', e); }
 }
 
 function renderAuctionPagination(totalPages) {
@@ -2329,6 +2345,7 @@ function renderMyAuctionTable() {
     const savedDate = row.saved_at ? row.saved_at.slice(0, 10) : '-';
     return `<tr data-id="${row.id}" class="${myAuctionSelected.has(row.id) ? 'row-selected' : ''}">
       <td class="col-chk"><input type="checkbox" ${myAuctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleMyAuctionRow(${row.id}, this.checked)"></td>
+      <td class="col-important"><button class="btn-important ${row.is_important ? 'is-active' : ''}" onclick="toggleMyAuctionImportant(${row.id})" title="중요한건 표시">★</button></td>
       <td class="col-seq">${row._seq}</td>
       <td class="col-action"><button class="btn-profit-sm" onclick="openProfitModal(${row.id})" title="수익률 분석">📊</button></td>
       <td class="col-case">${esc(row.case_no)}</td>
@@ -2437,6 +2454,21 @@ function startEditMyCell(cell) {
     if (e.key === 'Escape') { renderMyAuctionTable(); }
   });
   if (field === 'my_status') input.addEventListener('change', () => input.blur());
+}
+
+/* 중요한건 토글 */
+async function toggleMyAuctionImportant(id) {
+  const row = myAuctionData.find(r => r.id === id);
+  if (!row) return;
+  const newVal = !row.is_important;
+  try {
+    await fetch(`/api/my-auction/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_important: newVal })
+    });
+    row.is_important = newVal;
+    renderMyAuctionTable();
+  } catch (e) { console.error('중요 표시 변경 실패', e); }
 }
 
 /* 페이지네이션 */
@@ -2565,6 +2597,7 @@ function downloadMyAuctionExcel() {
     '건물평수':       r.building_area ?? '',
     '주소':           r.address || '',
     '체크사항':     r.check_notes || '',
+    '중요':         r.is_important ? 'Y' : '',
     '저장일':       r.saved_at ? r.saved_at.slice(0, 10) : '',
   }));
 
@@ -4131,13 +4164,13 @@ function renderDirectAuctionTable() {
   if (saveMyBtn) saveMyBtn.style.display = directAuctionSelected.size > 0 ? '' : 'none';
 
   if (!directAuctionData.length) {
-    tbody.innerHTML = '<tr><td colspan="22" class="auction-empty">데이터가 없습니다. 사이드바에서 가져오기를 실행하세요.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="23" class="auction-empty">데이터가 없습니다. 사이드바에서 가져오기를 실행하세요.</td></tr>';
     document.getElementById('da-pagination').innerHTML = '';
     document.getElementById('da-page-info').textContent = '';
     return;
   }
   if (!directAuctionFiltered.length) {
-    tbody.innerHTML = '<tr><td colspan="22" class="auction-empty">조건에 맞는 데이터가 없습니다.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="23" class="auction-empty">조건에 맞는 데이터가 없습니다.</td></tr>';
     document.getElementById('da-pagination').innerHTML = '';
     document.getElementById('da-page-info').textContent = '';
     return;
@@ -4165,6 +4198,7 @@ function renderDirectAuctionTable() {
     const sc        = statusClass(row.status);
     return `<tr data-id="${row.id}" class="${directAuctionSelected.has(row.id) ? 'row-selected' : ''}">
       <td class="col-chk"><input type="checkbox" ${directAuctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleDirectAuctionRow(${row.id}, this.checked)"></td>
+      <td class="col-important"><button class="btn-important ${row.is_important ? 'is-active' : ''}" onclick="toggleDirectAuctionImportant(${row.id})" title="중요한건 표시">★</button></td>
       <td class="col-seq">${row._seq ?? '-'}</td>
       <td class="col-case">${esc(row.case_no)}</td>
       <td class="col-type">${esc(row.item_type)}</td>
@@ -4195,6 +4229,21 @@ function renderDirectAuctionTable() {
   };
 
   renderDirectAuctionPagination(totalPages);
+}
+
+/* 직접조회 중요한건 토글 */
+async function toggleDirectAuctionImportant(id) {
+  const row = directAuctionData.find(r => r.id === id);
+  if (!row) return;
+  const newVal = !row.is_important;
+  try {
+    await fetch(`/api/direct-auction/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_important: newVal })
+    });
+    row.is_important = newVal;
+    renderDirectAuctionTable();
+  } catch (e) { console.error('중요 표시 변경 실패', e); }
 }
 
 function daMarketCellHtml(id, field, val) {

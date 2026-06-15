@@ -1621,6 +1621,23 @@ body {
 }
 .btn-row-del:hover { color: var(--danger); background: #fee2e2; }
 
+/* 중요한건 표시 */
+.col-important { width: 40px; text-align: center; }
+.btn-important {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 2px 4px;
+  color: #d1d5db;
+  transition: color .15s, transform .15s, text-shadow .15s;
+  line-height: 1;
+}
+.btn-important:hover { color: #f59e0b; transform: scale(1.25); }
+.btn-important.is-active {
+  color: #ef4444;
+  text-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
 
 /* 나만의경매 탭 */
 .my-auction-tabs {

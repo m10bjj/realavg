@@ -727,7 +727,7 @@ app.post('/api/auction/won-prices', async (req, res) => {
 app.put('/api/auction/:id', async (req, res) => {
   const id     = parseInt(req.params.id, 10);
   const fields = req.body;
-  const allowed = ['sale_market', 'jeonse_market', 'status', 'notes', 'winning_price', 'bid_date'];
+  const allowed = ['sale_market', 'jeonse_market', 'status', 'notes', 'winning_price', 'bid_date', 'is_important'];
   const safe = {};
   allowed.forEach(k => { if (k in fields) safe[k] = fields[k]; });
   if (!Object.keys(safe).length) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
@@ -1477,7 +1477,7 @@ app.post('/api/my-auction', async (req, res) => {
 /* PATCH /api/my-auction/:id – 편집 가능 필드 수정 */
 app.patch('/api/my-auction/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const allowed = ['my_status', 'my_bid_date', 'winning_price', 'min_price', 'official_price', 'jeonse_market', 'sale_market', 'check_notes'];
+  const allowed = ['my_status', 'my_bid_date', 'winning_price', 'min_price', 'official_price', 'jeonse_market', 'sale_market', 'check_notes', 'is_important'];
   const safe = {};
   allowed.forEach(k => { if (k in req.body) safe[k] = req.body[k]; });
   if (!Object.keys(safe).length) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
@@ -1850,7 +1850,7 @@ app.post('/api/direct-auction/fill-official-price', requireAuth, async (req, res
 /* PUT /api/direct-auction/:id */
 app.put('/api/direct-auction/:id', requireAuth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const allowed = ['sale_market', 'jeonse_market', 'status', 'notes', 'winning_price', 'bid_date', 'official_price'];
+  const allowed = ['sale_market', 'jeonse_market', 'status', 'notes', 'winning_price', 'bid_date', 'official_price', 'is_important'];
   const safe = {};
   allowed.forEach(k => { if (k in req.body) safe[k] = req.body[k]; });
   if (!Object.keys(safe).length) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
