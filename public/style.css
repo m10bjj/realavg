@@ -1408,7 +1408,7 @@ body {
 }
 .header-housing-label {
   font-size: var(--font-sm);
-  color: var(--text-muted);
+  color: rgba(255,255,255,.7);
   white-space: nowrap;
 }
 .header-housing-sel {
@@ -1418,6 +1418,10 @@ body {
   border-radius: 6px;
   background: rgba(255,255,255,.1);
   cursor: pointer;
+  color: #fff;
+}
+.header-housing-sel option {
+  background: #1e293b;
   color: #fff;
 }
 
