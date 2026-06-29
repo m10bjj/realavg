@@ -1047,28 +1047,28 @@ function switchAdminTab(tab) {
 
 async function loadKeepaliveLogs() {
   const tbody = document.getElementById('keepalive-log-body');
-  tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">불러오는 중...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="3" class="keepalive-loading">불러오는 중...</td></tr>';
   try {
     const res = await fetch('/api/keepalive-logs');
     if (!res.ok) throw new Error('서버 오류');
     const logs = await res.json();
     if (!logs.length) {
-      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">기록 없음</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="3" class="keepalive-empty">기록 없음</td></tr>';
       return;
     }
     tbody.innerHTML = logs.map(log => {
       const kst = new Date(log.executed_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
       const badge = log.status === 'ok'
-        ? '<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600">정상</span>'
-        : '<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600">오류</span>';
-      return `<tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:7px 8px">${kst}</td>
-        <td style="text-align:center;padding:7px 8px">${badge}</td>
-        <td style="padding:7px 8px;color:var(--text-muted);font-size:12px">${log.message || '-'}</td>
+        ? '<span class="keepalive-status-ok">정상</span>'
+        : '<span class="keepalive-status-err">오류</span>';
+      return `<tr>
+        <td class="keepalive-time">${kst}</td>
+        <td class="keepalive-cell" style="text-align:center">${badge}</td>
+        <td class="keepalive-msg">${log.message || '-'}</td>
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--danger)">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="3" class="keepalive-error">${e.message}</td></tr>`;
   }
 }
 function closeAdminModal() {
@@ -1573,7 +1573,7 @@ function renderAuctionTable() {
     const sc        = statusClass(row.status);
     return `<tr data-id="${row.id}" class="${auctionSelected.has(row.id) ? 'row-selected' : ''}">
       <td class="col-chk"><input type="checkbox" ${auctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleAuctionRow(${row.id}, this.checked)"></td>
-      <td class="col-important"><button class="btn-important ${row.is_important ? 'is-active' : ''}" onclick="toggleAuctionImportant(${row.id})" title="중요한건 표시">★</button></td>
+      <td class="col-important"><button class="btn-important ${row.is_important ? 'is-active' : ''}" onclick="toggleAuctionImportant(${row.id})" title="중요한건 표시"><svg width="16" height="16" viewBox="0 0 24 24" fill="${row.is_important ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button></td>
       <td class="col-seq">${row._seq ?? '-'}</td>
       <td class="col-case">${esc(row.case_no)}</td>
       <td class="col-type">${esc(row.item_type)}</td>
@@ -1594,7 +1594,7 @@ function renderAuctionTable() {
       <td class="col-area">${row.land_area != null ? row.land_area : '-'}</td>
       <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="${naverLandUrl(row.address, row.item_type)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산 검색">N</a> ` : ''}${esc(row.address)}</td>
       <td class="col-notes" title="${esc(row.notes)}">${esc(row.notes)}</td>
-      <td class="col-del"><button class="btn-row-del" onclick="deleteOneAuction(${row.id})" title="삭제">✕</button></td>
+      <td class="col-del"><button class="btn-row-del" onclick="deleteOneAuction(${row.id})" title="삭제"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></td>
     </tr>`;
   }).join('');
 
@@ -2345,9 +2345,9 @@ function renderMyAuctionTable() {
     const savedDate = row.saved_at ? row.saved_at.slice(0, 10) : '-';
     return `<tr data-id="${row.id}" class="${myAuctionSelected.has(row.id) ? 'row-selected' : ''}">
       <td class="col-chk"><input type="checkbox" ${myAuctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleMyAuctionRow(${row.id}, this.checked)"></td>
-      <td class="col-important"><button class="btn-important ${row.is_important ? 'is-active' : ''}" onclick="toggleMyAuctionImportant(${row.id})" title="중요한건 표시">★</button></td>
+      <td class="col-important"><button class="btn-important ${row.is_important ? 'is-active' : ''}" onclick="toggleMyAuctionImportant(${row.id})" title="중요한건 표시"><svg width="16" height="16" viewBox="0 0 24 24" fill="${row.is_important ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button></td>
       <td class="col-seq">${row._seq}</td>
-      <td class="col-action"><button class="btn-profit-sm" onclick="openProfitModal(${row.id})" title="수익률 분석">📊</button></td>
+      <td class="col-action"><button class="btn-profit-sm" onclick="openProfitModal(${row.id})" title="수익률 분석"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button></td>
       <td class="col-case">${esc(row.case_no)}</td>
       <td class="col-type">${esc(row.item_type)}</td>
       <td class="col-region">${esc(row.region)}</td>
@@ -2367,7 +2367,7 @@ function renderMyAuctionTable() {
       <td class="${profitCellClass(calcProfit(row.sale_market, row.min_price))}">${profitCellHtml(calcProfit(row.sale_market, row.min_price))}</td>
       <td class="col-notes my-editable" data-id="${row.id}" data-field="check_notes" data-val="${esc(row.check_notes || '')}" title="${esc(row.check_notes)}">${esc(row.check_notes) || '-'}</td>
       <td class="col-date">${savedDate}</td>
-      <td class="col-del"><button class="btn-row-del" onclick="deleteOneMyAuction(${row.id})" title="삭제">✕</button></td>
+      <td class="col-del"><button class="btn-row-del" onclick="deleteOneMyAuction(${row.id})" title="삭제"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></td>
     </tr>`;
   }).join('');
 
@@ -2718,7 +2718,7 @@ function renderNaverRows(listings) {
 }
 
 function _renderNaverPage() {
-  const DEAL_COLOR = { '매매': '#2563eb', '전세': '#7c3aed', '월세': '#b45309' };
+  const DEAL_CLASS = { '매매': 'naver-deal-매매', '전세': 'naver-deal-전세', '월세': 'naver-deal-월세' };
   const tbody = document.getElementById('naver-tbody');
   if (!tbody) return;
 
@@ -2730,26 +2730,26 @@ function _renderNaverPage() {
   const pageData = window._naverFiltered.slice(start, end);
 
   tbody.innerHTML = pageData.map((r, i) => {
-    const color  = DEAL_COLOR[r.dealType] || '';
+    const dealCls = DEAL_CLASS[r.dealType] || '';
     const supply = (r.supplyArea && r.supplyArea !== '-') ? r.supplyArea : '-';
     const excl   = r.exclArea   || '-';
     const pyeong = r.exclPyeong || (excl !== '-' ? (parseFloat(excl) / 3.3058).toFixed(1) : '-');
     const nameTitle = r.name ? ` title="${esc((r.ownerType || '') + r.name)}"` : '';
     const seq = start + i + 1;
     return `<tr>
-      <td class="col-seq"${nameTitle}>${seq}${r.ownerType ? `<br><small style="color:#888">${r.ownerType}</small>` : ''}</td>
-      <td style="text-align:center;font-weight:700;color:${color}">${esc(r.dealType)}</td>
-      <td class="col-price" style="font-weight:600">${esc(r.price)}</td>
+      <td class="col-seq"${nameTitle}>${seq}${r.ownerType ? `<br><small class="naver-cell-small">${r.ownerType}</small>` : ''}</td>
+      <td class="naver-cell-deal-type ${dealCls}">${esc(r.dealType)}</td>
+      <td class="col-price naver-cell-price">${esc(r.price)}</td>
       <td class="col-type">${esc(r.houseType)}</td>
-      <td style="text-align:center;font-size:12px">${esc(supply)}</td>
-      <td style="text-align:center;font-size:12px">${esc(excl)}</td>
-      <td style="text-align:center;font-size:12px;font-weight:600;color:#0f766e">${esc(pyeong)}</td>
+      <td class="naver-cell-center">${esc(supply)}</td>
+      <td class="naver-cell-center">${esc(excl)}</td>
+      <td class="naver-cell-pyeong">${esc(pyeong)}</td>
       <td class="col-floor">${esc(r.floorCur)}</td>
       <td class="col-floor">${esc(r.floorTotal)}</td>
-      <td style="text-align:center">${esc(r.direction)}</td>
-      <td style="text-align:center;font-size:11px">${esc(r.buildAge)}</td>
-      <td style="font-size:12px">${esc(r.agent)}</td>
-      <td style="font-size:11px;text-align:center;white-space:nowrap">${esc(r.confirmDate)}</td>
+      <td class="naver-cell-center">${esc(r.direction)}</td>
+      <td class="naver-cell-small naver-cell-center">${esc(r.buildAge)}</td>
+      <td class="naver-cell-agent">${esc(r.agent)}</td>
+      <td class="naver-cell-date">${esc(r.confirmDate)}</td>
       <td class="col-notes">${esc(r.highlight)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="14" class="auction-empty">결과가 없습니다.</td></tr>';
@@ -3062,7 +3062,7 @@ function renderNaverBoard() {
     return `<div class="naver-board-item" onclick="loadNaverAnalysis('${a.id}')">
       <div class="naver-board-title-row">
         <span class="naver-board-title">${esc(a.title)}</span>
-        <button class="naver-history-del" onclick="deleteNaverAnalysis('${a.id}', event)" title="삭제">✕</button>
+        <button class="naver-history-del" onclick="deleteNaverAnalysis('${a.id}', event)" title="삭제"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>`;
   }).join('');
@@ -4198,7 +4198,7 @@ function renderDirectAuctionTable() {
     const sc        = statusClass(row.status);
     return `<tr data-id="${row.id}" class="${directAuctionSelected.has(row.id) ? 'row-selected' : ''}">
       <td class="col-chk"><input type="checkbox" ${directAuctionSelected.has(row.id) ? 'checked' : ''} onchange="toggleDirectAuctionRow(${row.id}, this.checked)"></td>
-      <td class="col-important"><button class="btn-important ${row.is_important ? 'is-active' : ''}" onclick="toggleDirectAuctionImportant(${row.id})" title="중요한건 표시">★</button></td>
+      <td class="col-important"><button class="btn-important ${row.is_important ? 'is-active' : ''}" onclick="toggleDirectAuctionImportant(${row.id})" title="중요한건 표시"><svg width="16" height="16" viewBox="0 0 24 24" fill="${row.is_important ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button></td>
       <td class="col-seq">${row._seq ?? '-'}</td>
       <td class="col-case">${esc(row.case_no)}</td>
       <td class="col-type">${esc(row.item_type)}</td>
@@ -4219,7 +4219,7 @@ function renderDirectAuctionTable() {
       <td class="col-area">${row.land_area != null ? row.land_area : '-'}</td>
       <td class="col-addr" title="${esc(row.address)}">${row.address ? `<a href="${naverLandUrl(row.address, row.item_type)}" target="_blank" rel="noopener" class="naver-land-link" title="네이버 부동산 검색">N</a> ` : ''}${esc(row.address)}</td>
       <td class="col-notes" title="${esc(row.notes)}">${esc(row.notes)}</td>
-      <td class="col-del"><button class="btn-row-del" onclick="deleteOneDirectAuction(${row.id})" title="삭제">✕</button></td>
+      <td class="col-del"><button class="btn-row-del" onclick="deleteOneDirectAuction(${row.id})" title="삭제"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></td>
     </tr>`;
   }).join('');
 

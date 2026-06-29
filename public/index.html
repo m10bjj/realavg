@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MJiH's home</title>
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -186,7 +187,7 @@
               </div>
             </div>
           </div>
-          <div id="af-result-count" style="font-size:12px;font-weight:600;color:var(--primary);padding:4px 2px;min-height:18px"></div>
+          <div id="af-result-count" class="filter-result-count"></div>
           <button class="btn btn-primary btn-search-submit" onclick="applyAuctionFilter()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -327,7 +328,7 @@
               </div>
             </div>
           </div>
-          <div id="maf-result-count" style="font-size:12px;font-weight:600;color:var(--primary);padding:4px 2px;min-height:18px"></div>
+          <div id="maf-result-count" class="filter-result-count"></div>
           <button class="btn btn-primary btn-search-submit" onclick="applyMyAuctionFilter()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -349,7 +350,7 @@
             </svg>
             데이터 가져오기
           </span>
-          <span style="font-size:11px;font-weight:600;color:var(--primary);background:var(--primary-light,#eff6ff);padding:2px 7px;border-radius:10px">탱크옥션</span>
+          <span class="source-badge">탱크옥션</span>
         </div>
         <div class="form-sections">
           <div class="form-section form-section--region">
@@ -548,7 +549,7 @@
               </div>
             </div>
           </div>
-          <div id="daf-result-count" style="font-size:12px;font-weight:600;color:var(--primary);padding:4px 2px;min-height:18px"></div>
+          <div id="daf-result-count" class="filter-result-count"></div>
           <button class="btn btn-primary btn-search-submit" onclick="applyDirectAuctionFilter()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -786,7 +787,9 @@
             <div id="analysis-panel" class="analysis-panel" style="display:none">
               <div class="analysis-header">
                 <span class="analysis-title">평단가 분석</span>
-                <button class="btn-clear-sel" onclick="clearSelection()" title="선택 해제">✕</button>
+                <button class="btn-clear-sel" onclick="clearSelection()" title="선택 해제">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
               </div>
               <div class="analysis-count"><span id="analysis-count-num">0</span>건 선택됨</div>
               <p id="analysis-basis" class="analysis-basis">거래금액 기준</p>
@@ -829,9 +832,9 @@
               <path d="M2 17l10 5 10-5"/>
               <path d="M2 12l10 5 10-5"/>
             </svg>
-            <h2 style="margin:0;font-size:16px;font-weight:700">부동산경매(안전한물건)</h2>
-            <span style="margin-left:8px;font-size:12px;color:#888;font-weight:400">대항력은 있지만 대항력 없는 물건</span>
-            <span class="badge" id="auction-badge" style="margin-left:4px"></span>
+            <h2 class="view-title">부동산경매(안전한물건)</h2>
+            <span class="view-subtitle">대항력은 있지만 대항력 없는 물건</span>
+            <span class="badge" id="auction-badge"></span>
             <button class="btn-guide" onclick="openAuctionGuideModal()" title="화면 설명 보기">?</button>
           </div>
           <div class="auction-header-actions">
@@ -947,9 +950,9 @@
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
             </svg>
-            <h2 style="margin:0;font-size:16px;font-weight:700">부동산경매(직접조회)</h2>
-            <span style="margin-left:8px;font-size:12px;color:#888;font-weight:400">탱크옥션 실시간 조회</span>
-            <span class="badge" id="direct-auction-badge" style="margin-left:4px"></span>
+            <h2 class="view-title">부동산경매(직접조회)</h2>
+            <span class="view-subtitle">탱크옥션 실시간 조회</span>
+            <span class="badge" id="direct-auction-badge"></span>
           </div>
           <div class="auction-header-actions">
             <button class="btn btn-accent btn-sm" id="da-save-my-btn" onclick="saveDirectToMyAuction()" style="display:none">
@@ -1035,8 +1038,8 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>
-            <h2 style="margin:0;font-size:16px;font-weight:700">나만의 경매물건</h2>
-            <span class="badge" id="my-auction-badge" style="margin-left:4px"></span>
+            <h2 class="view-title">나만의 경매물건</h2>
+            <span class="badge" id="my-auction-badge"></span>
           </div>
           <div class="auction-header-actions">
             <button class="btn btn-outline btn-sm" onclick="downloadMyAuctionExcel()">
@@ -1125,8 +1128,8 @@
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
               <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
-            <h2 style="margin:0;font-size:16px;font-weight:700">네이버부동산 호가보기</h2>
-            <span class="badge" id="naver-count-badge" style="margin-left:4px"></span>
+            <h2 class="view-title">네이버부동산 호가보기</h2>
+            <span class="badge" id="naver-count-badge"></span>
             <button class="btn-guide" onclick="openNaverGuideModal()" title="화면 설명 보기">?</button>
           </div>
           <div class="auction-header-actions">
@@ -1385,17 +1388,17 @@
       <!-- 탭 3: 서버 상태 -->
       <div id="admin-tab-keepalive" style="display:none">
         <p class="modal-desc">Vercel Cron이 매일 DB를 깨운 기록입니다. 최근 30개를 보존합니다.</p>
-        <div id="keepalive-log-wrap" style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <div id="keepalive-log-wrap" class="table-wrap">
+          <table class="guide-table">
             <thead>
-              <tr style="border-bottom:2px solid var(--border)">
-                <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:600">시각 (KST)</th>
-                <th style="text-align:center;padding:6px 8px;color:var(--text-muted);font-weight:600">결과</th>
-                <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:600">비고</th>
+              <tr>
+                <th>시각 (KST)</th>
+                <th style="text-align:center">결과</th>
+                <th>비고</th>
               </tr>
             </thead>
             <tbody id="keepalive-log-body">
-              <tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">불러오는 중...</td></tr>
+              <tr><td colspan="3" class="keepalive-loading">불러오는 중...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1436,7 +1439,11 @@
           <h3 class="modal-title">데이터 갱신하기</h3>
           <p id="refresh-target-info" class="refresh-target-info"></p>
         </div>
-        <button class="btn-modal-close" onclick="closeRefreshModal()">✕</button>
+        <button class="btn-modal-close" onclick="closeRefreshModal()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
 
       <!-- 사이트 선택 -->
@@ -1524,7 +1531,7 @@
 
       <!-- 속도 저하 안내 (항상 표시) -->
       <div style="display:flex;gap:10px;align-items:flex-start;background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#78350f;line-height:1.6">
-        <span style="font-size:16px;flex-shrink:0">⚠️</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#78350f" stroke-width="2" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         <div>
           <strong>갱신 속도가 느린 이유</strong><br>
           차단 방지를 위해 요청마다 <strong>3~8초 랜덤 딜레이</strong>를 두고 <strong>1건씩 순차 처리</strong>합니다.<br>
@@ -1599,7 +1606,10 @@
 
           <!-- ▌왼쪽: 초기투자비용 -->
           <div class="profit-section profit-section--invest">
-            <div class="profit-section-title">💰 초기투자비용</div>
+            <div class="profit-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M2 10h2"/><path d="M20 10h2"/><path d="M2 14h2"/><path d="M20 14h2"/></svg>
+              초기투자비용
+            </div>
 
             <!-- 낙찰가 / 감정가대비 -->
             <div class="profit-row profit-row--2">
@@ -1715,7 +1725,10 @@
 
             <!-- 수입 -->
             <div class="profit-section profit-section--income">
-              <div class="profit-section-title">📈 수입</div>
+              <div class="profit-section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                수입
+              </div>
 
               <div class="profit-row profit-row--2">
                 <div class="profit-field">
@@ -1752,7 +1765,10 @@
 
             <!-- 지출 -->
             <div class="profit-section profit-section--expense">
-              <div class="profit-section-title">💸 지출</div>
+              <div class="profit-section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+                지출
+              </div>
 
               <!-- 대출이자 -->
               <div class="profit-row profit-row--4">
@@ -1853,7 +1869,9 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
   <script src="app.js?v=20260629"></script>
+  <script>document.addEventListener('DOMContentLoaded', function() { if (typeof lucide !== 'undefined') lucide.createIcons(); });</script>
 
   <!-- 국토부 실거래가 안내 모달 -->
   <div id="realestate-guide-backdrop" class="modal-backdrop" style="display:none" onclick="closeRealEstateGuideModal(event)">
@@ -1863,7 +1881,11 @@
           <span class="guide-icon">?</span>
           국토부 실거래가 사용 가이드
         </div>
-        <button class="btn-modal-close" onclick="closeRealEstateGuideModal()">✕</button>
+        <button class="btn-modal-close" onclick="closeRealEstateGuideModal()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
       <div class="guide-modal-body">
 
@@ -1936,7 +1958,11 @@
           <span class="guide-icon">?</span>
           네이버부동산 호가보기 사용 가이드
         </div>
-        <button class="btn-modal-close" onclick="closeNaverGuideModal()">✕</button>
+        <button class="btn-modal-close" onclick="closeNaverGuideModal()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
       <div class="guide-modal-body">
 
@@ -2005,7 +2031,11 @@
           <span class="guide-icon">?</span>
           부동산경매(안전한물건) 사용 가이드
         </div>
-        <button class="btn-modal-close" onclick="closeAuctionGuideModal()">✕</button>
+        <button class="btn-modal-close" onclick="closeAuctionGuideModal()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
       <div class="guide-modal-body">
 
